@@ -45,10 +45,11 @@ class FedISIC2019_Dataset():
             label_counter[label_on_sample] += 1
         
         colors = ['red', 'gold', 'limegreen', 'dodgerblue', 'orange', 'violet', 'tomato', 'teal']
-        plt.bar(self.labels_for_the_labels, label_counter, color=colors)
+        label_bars = plt.bar(self.labels_for_the_labels, label_counter, color=colors)
         plt.title("Label distribution for the centralized Fed-ISIC2019")
         plt.xlabel("labels_for_the_labels")
         plt.ylabel("Number of Images")
+        plt.bar_label(label_bars, labels=label_counter, padding=5)
         plt.show()
 
         return
@@ -90,7 +91,7 @@ class FedISIC2019_Dataset():
 
 
 
-dataset = FedISIC2019_Dataset()
+dataset = FedISIC2019_Dataset(None)
 
 #full_train, full_test = dataset.centralized_dataset()
 
