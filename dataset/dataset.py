@@ -91,17 +91,16 @@ class FedISIC2019_Dataset():
             
             partitions_sample_count_list.append(partition_number_of_samples)
             partition_number_of_samples = 0
-                
-        print(df)
-        print(ax.patches[2].get_height())
         
-        for partition_total in partitions_sample_count_list:
-            x_center = partition_total / 2
+        for i_bar, partition_total in enumerate(partitions_sample_count_list):
+            
             ax.text(
-                x_center,
+                i_bar,
                 partition_total,
                 str(partition_total),
-                fontsize=100
+                fontsize=10,
+                ha="center",
+                va="bottom"
             )
 
         plt.show()
@@ -159,6 +158,6 @@ dataset = FedISIC2019_Dataset(None)
 
 #print(full_train[0]["label"])
 
-dataset.plot_centralized_train_class_distribution()
+#dataset.plot_centralized_train_class_distribution()
 
 dataset.plot_in_partitions_train_class_distribution()
