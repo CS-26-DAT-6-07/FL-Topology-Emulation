@@ -144,8 +144,6 @@ class FedISIC2019_Dataset():
         
         return tensor
 
-
-
     def apply_oversampling_train_transform(self, pil_img):
         if self.seed != None:
             np.random.seed(self.seed)
@@ -172,6 +170,9 @@ class FedISIC2019_Dataset():
         )
 
         return tensor
+    
+    def federated_dataset_no_augments(self):
+        pass
     
 
 
