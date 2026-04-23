@@ -1,4 +1,5 @@
 import random
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -54,7 +55,57 @@ class FedISIC2019_Dataset():
         plt.show()
 
         return
-    
+
+    def augment_dataset(self, representative):
+        amt_labels = 8
+
+        partitions = self.fds.partitioners["train"]
+        
+        data = [partitions.load_partition(i) for i in range(0,partitions.num_partitions)] 
+
+        num_labels = [[0 for i in range(0,amt_labels)] for i in range(0,partitions.num_partitions)]
+
+        #Count labels for each of the partitions
+        for d in range(0, partitions.num_partitions):
+            for row in data[d]:
+                num_labels[d][row["label"]] += 1
+
+        distributions = [self.__calc_distr(num_labels[i],len(data[i])) for i in range(0,partitions.num_partitions)]
+        
+        for i in [x for x in range(0,partitions.num_partitions) if x != representative]:
+            missing_label_percentage = 0
+            for j in [x for x in range(0,amt_labels) if np.isclose(distributions[i][x],0)]:
+                missing_label_percentage += distributions[representative][j]
+            #n = [0 for i in range(0, amt_labels)]
+            for j in [x for x in range(0,amt_labels) if not np.isclose(distributions[i][x],0)]:
+                n = math.ceil((distributions[representative][j]/np.round((1 - missing_label_percentage)))*data[i].num_rows - num_labels[i][j])
+                print(n)
+                for _ in range(0, abs(n)):
+                    if(n > 0):
+                        print(1)
+                        temp = data[i].filter(lambda e: e['label'] == j)
+                        print(temp)
+                        elem = temp.select([np.random.randint(0,temp.num_rows)])
+                        self.fds.partitioners["train"].dataset = self.fds.partitioners.dataset.add_item({'image': self.apply_oversampling_train_transform()})
+                        
+                    elif(n < 0):
+                        print("uwu")
+
+
+            
+
+            #temp= [num_labels[i][j] + n[j] for j in range(amt_labels)]
+            #t = self.__calc_distr(temp, sum(temp))
+            #print(sum(n))
+            #print([distributions[representative][j] - t[j]  for j in range(0,amt_labels)])
+            
+
+
+    def __calc_distr(self, num_labels, total_examples):
+        return [x/total_examples for x in num_labels]
+
+
+
     def plot_in_partitions_train_class_distribution(self):
         partitioner = self.fds.partitioners["train"]
 
@@ -147,8 +198,11 @@ class FedISIC2019_Dataset():
 
 
 
-dataset = FedISIC2019_Dataset(None)
+dataset = FedISIC2019_Dataset(0)
 
+print(dataset.fds.partitioners["train"].load_partition(0).num_rows)
+dataset.dup()
+print(dataset.fds.partitioners["train"].load_partition(0).num_rows)
 #print(dataset.fds.partitioners["test"].dataset)
 
 #fta, ftt = dataset.centralized_dataset()
@@ -159,6 +213,7 @@ dataset = FedISIC2019_Dataset(None)
 
 #print(full_train[0]["label"])
 
-dataset.plot_centralized_train_class_distribution()
+#dataset.plot_centralized_train_class_distribution()
 
-dataset.plot_in_partitions_train_class_distribution()
+#dataset.plot_in_partitions_train_class_distribution()
+#dataset.augment_dataset(0)
