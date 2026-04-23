@@ -116,6 +116,36 @@ class FedISIC2019_Dataset():
 
         return
     
+    def apply_train_val_test_standard_transform(self, pil_img, pytorch_tensor: bool):
+        if self.seed != None:
+            np.random.seed(self.seed)
+        
+        transform = albumentations.Compose([
+            albumentations.PadIfNeeded(min_height=SIZE_IMG, min_width=SIZE_IMG, border_mode=0, value=0),
+            albumentations.CenterCrop(height=SIZE_IMG, width=SIZE_IMG),
+            albumentations.Normalize(normalization="min_max_per_channel")
+        ])
+
+        #Taking the Pillow formated image from the dataset and make it into a Numpy Array
+        img_np = np.array(pil_img)
+        
+        #Applying the transform
+        augmented = transform(image=img_np)["image"]
+
+        #Trasposing the image into a Pytorch-friendly tensor
+        tensor = torch.tensor(
+            np.transpose(augmented, (2, 0, 1)),
+            dtype=torch.float32
+        )
+
+        #Return augmented in cases where the image isn't finished being transformed. It could be thrown into another transformation
+        if pytorch_tensor != True:
+            return augmented
+        
+        return tensor
+
+
+
     def apply_oversampling_train_transform(self, pil_img):
         if self.seed != None:
             np.random.seed(self.seed)
@@ -167,6 +197,6 @@ dataset = FedISIC2019_Dataset(None)
 
 #print(full_train[0]["label"])
 
-#dataset.plot_centralized_train_class_distribution()
+dataset.plot_centralized_train_class_distribution()
 
 dataset.plot_in_partitions_train_class_distribution()
