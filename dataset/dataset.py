@@ -70,18 +70,26 @@ class FedISIC2019_Dataset():
             for row in data[d]:
                 num_labels[d][row["label"]] += 1
 
+        #List of lists with the distributions per partition
         distributions = [self.__calc_distr(num_labels[i],len(data[i])) for i in range(0,partitions.num_partitions)]
 
         newTrain = []
+        #For all partitions that are not the representative partition, we...
         for i in range(0,partitions.num_partitions):
             if(i == representative):
                 for row in data[representative]:
                     newTrain.append({"center":representative,"image":row["image"],"label":row["label"]})
             missing_label_percentage = 0
+
+            #...add the missing_label_percentage of the labels that dont exist in the partition, then...
             for j in [x for x in range(0,amt_labels) if np.isclose(distributions[i][x],0)]:
                 missing_label_percentage += distributions[representative][j]
             #n = [0 for i in range(0, amt_labels)]
+            #...for the labels that do exist...
             for j in [x for x in range(0,amt_labels) if not np.isclose(distributions[i][x],0)]:
+                #...calculate the number of pictures to add/remove from the set...
+                #Ratio (r) = desired ration of label/The_total_ratio_of_existing_labels_in_partition (1 - missing_label_percentage)
+                #Number of images to add or remove (n) = (r * all_samples_in_partition)/The_total_ratio_of_existing_labels_in_partition - number_of_n_label_img_in_partition
                 n = math.ceil((distributions[representative][j]/np.round((1 - missing_label_percentage)))*data[i].num_rows - num_labels[i][j])
                 if(n > 0):
                     temp = data[i].filter(lambda e: e['label'] == j)
@@ -90,6 +98,19 @@ class FedISIC2019_Dataset():
                         print("")          
                 elif(n < 0):
                     print("uwu")
+                print(n)
+
+                #Add augmented img/Remove excesive images
+                for _ in range(0, abs(n)):
+                    if(n > 0):
+                        print(1)
+                        temp = data[i].filter(lambda e: e['label'] == j)
+                        print(temp)
+                        elem = temp.select([np.random.randint(0,temp.num_rows)])
+                        self.fds.partitioners["train"].dataset = self.fds.partitioners.dataset.add_item({'image': self.apply_oversampling_train_transform()})
+                        
+                    elif(n < 0):
+                        print("uwu")
 
 
             
