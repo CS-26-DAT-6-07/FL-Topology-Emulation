@@ -4,15 +4,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import albumentations
+import csv
 from collections import defaultdict
-from torch.utils.data import Dataset, DataLoader
+from datasets import Dataset, load_dataset
+from torch.utils.data import DataLoader
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import NaturalIdPartitioner
 from flwr_datasets.visualization import plot_label_distributions
 
 #Constants
 SIZE_IMG = 299
-
 
 class FedISIC2019_Dataset():
     fds = None
@@ -55,8 +56,12 @@ class FedISIC2019_Dataset():
         plt.show()
 
         return
-
+    
     def augment_dataset(self, representative):
+        return self.__apply_augmentations(representative=representative)
+         
+
+    def __apply_augmentations(self, representative):
         amt_labels = 8
 
         partitions = self.fds.partitioners["train"]
@@ -64,7 +69,7 @@ class FedISIC2019_Dataset():
         data = [partitions.load_partition(i) for i in range(0,partitions.num_partitions)] 
 
         num_labels = [[0 for i in range(0,amt_labels)] for i in range(0,partitions.num_partitions)]
-
+        print("Couting labels")
         #Count labels for each of the partitions
         for d in range(0, partitions.num_partitions):
             for row in data[d]:
@@ -73,14 +78,17 @@ class FedISIC2019_Dataset():
         #List of lists with the distributions per partition
         distributions = [self.__calc_distr(num_labels[i],len(data[i])) for i in range(0,partitions.num_partitions)]
 
-        newTrain = []
-        #For all partitions that are not the representative partition, we...
+        new_train = [[] for x in range(0,partitions.num_partitions)]
+        #For all partitions, we...
         for i in range(0,partitions.num_partitions):
+            print(f"augmenting partition {i}")
             if(i == representative):
                 for row in data[representative]:
-                    newTrain.append({"center":representative,"image":row["image"],"label":row["label"]})
-            missing_label_percentage = 0
+                    tempImg = self.__to_torch_tensor(row['image'])
+                    new_train[i].append({"center":representative,"image":tempImg ,"label":row["label"]})
+                continue    
 
+            missing_label_percentage = 0
             #...add the missing_label_percentage of the labels that dont exist in the partition, then...
             for j in [x for x in range(0,amt_labels) if np.isclose(distributions[i][x],0)]:
                 missing_label_percentage += distributions[representative][j]
@@ -91,41 +99,25 @@ class FedISIC2019_Dataset():
                 #Ratio (r) = desired ration of label/The_total_ratio_of_existing_labels_in_partition (1 - missing_label_percentage)
                 #Number of images to add or remove (n) = (r * all_samples_in_partition)/The_total_ratio_of_existing_labels_in_partition - number_of_n_label_img_in_partition
                 n = math.ceil((distributions[representative][j]/np.round((1 - missing_label_percentage)))*data[i].num_rows - num_labels[i][j])
+                
+                temp = data[i].filter(lambda e: e['label'] == j)
                 if(n > 0):
-                    temp = data[i].filter(lambda e: e['label'] == j)
-                    elem = temp.select([np.random.randint(0,temp.num_rows) for x in range(0, n)]).to_list()
-                    for row in elem:
-                        print("")          
+                    new_train[i] = [{"center":i,"label":j,"image":self.__to_torch_tensor(row["image"])} for row in temp]
+                    elem = temp.select([np.random.randint(0,temp.num_rows) for _ in range(0, n)])
+                    for m in range(0, n):
+                        new_train[i].append({"center": i,"label":j,"image":self.apply_oversampling_train_transform(elem[m]["image"])})
                 elif(n < 0):
-                    print("uwu")
-                print(n)
-
-                #Add augmented img/Remove excesive images
-                for _ in range(0, abs(n)):
-                    if(n > 0):
-                        print(1)
-                        temp = data[i].filter(lambda e: e['label'] == j)
-                        print(temp)
-                        elem = temp.select([np.random.randint(0,temp.num_rows)])
-                        self.fds.partitioners["train"].dataset = self.fds.partitioners.dataset.add_item({'image': self.apply_oversampling_train_transform()})
-                        
-                    elif(n < 0):
-                        print("uwu")
-
-
-            
-
-            #temp= [num_labels[i][j] + n[j] for j in range(amt_labels)]
-            #t = self.__calc_distr(temp, sum(temp))
-            #print(sum(n))
-            #print([distributions[representative][j] - t[j]  for j in range(0,amt_labels)])
-            
-
-
+                    rmv = np.random.choice([x for x in range(0, temp.num_rows)],abs(n), replace=False)
+                    for x in range(0,temp.num_rows):
+                        if(x not in rmv):
+                            new_train[i].append({"center":i,"label":j,"image":self.__to_torch_tensor(temp[x]["image"])})
+        return new_train
+       
     def __calc_distr(self, num_labels, total_examples):
         return [x/total_examples for x in num_labels]
 
-
+    def __to_torch_tensor(self, pil):
+        return torch.tensor(np.transpose(np.array(pil),(2,0,1)),dtype=torch.float32)
 
     def plot_in_partitions_train_class_distribution(self):
         partitioner = self.fds.partitioners["train"]
@@ -185,7 +177,7 @@ class FedISIC2019_Dataset():
             np.random.seed(self.seed)
         
         transform = albumentations.Compose([
-            albumentations.PadIfNeeded(min_height=SIZE_IMG, min_width=SIZE_IMG, border_mode=0, value=0),
+            albumentations.PadIfNeeded(min_height=SIZE_IMG, min_width=SIZE_IMG, border_mode=0),
             albumentations.CenterCrop(height=SIZE_IMG, width=SIZE_IMG),
             albumentations.RandomScale(0.07),
             albumentations.RandomRotate90(),
@@ -235,3 +227,4 @@ dataset = FedISIC2019_Dataset(0)
 
 #dataset.plot_in_partitions_train_class_distribution()
 dataset.augment_dataset(0)
+
