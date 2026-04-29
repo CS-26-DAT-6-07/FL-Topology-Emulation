@@ -88,9 +88,10 @@ class FedISIC2019_Dataset():
                 print(f"augmenting partition {i}")
             if(i == representative):
                 for row in data[representative]:
-                    tempImg = self.__to_torch_tensor(row['image'])
+                    temp_img = self.apply_train_val_test_standard_transform(row["image"])
+                    tensorified_temp_img = self.__to_torch_tensor(temp_img)
 
-                    new_train[i].append({"center":representative,"image":tempImg ,"label":row["label"]})
+                    new_train[i].append({"center":representative,"image":tensorified_temp_img ,"label":row["label"]})
                 continue    
 
             missing_label_percentage = 0
@@ -129,6 +130,7 @@ class FedISIC2019_Dataset():
         return [x/total_examples for x in num_labels]
 
     def __to_torch_tensor(self, pil):
+
         return self.normalize_and_tensorify(pil)
 
     def __to_numpy(self, img):
@@ -219,11 +221,11 @@ class FedISIC2019_Dataset():
             np.random.seed(self.seed)
         
         transform = albumentations.Compose([
-            albumentations.PadIfNeeded(min_height=SIZE_IMG, min_width=SIZE_IMG, border_mode=0),
-            albumentations.CenterCrop(height=SIZE_IMG, width=SIZE_IMG),
             albumentations.RandomScale(0.07),
             albumentations.RandomRotate90(),
-            albumentations.ShiftScaleRotate()
+            albumentations.ShiftScaleRotate(),
+            albumentations.PadIfNeeded(min_height=SIZE_IMG, min_width=SIZE_IMG, border_mode=0),
+            albumentations.CenterCrop(height=SIZE_IMG, width=SIZE_IMG)
         ])
 
         #Taking the Pillow formated image from the dataset and make it into a Numpy Array
@@ -329,16 +331,12 @@ dataset = FedISIC2019_Dataset(67)
 #dataset.augment_dataset(0)
 
 
-
-#train_dataloader, test_dataloader, seed_logs = dataset.generate_dataloader_for_dataset(0)
-
-#batch = next(iter(train_dataloader))
-#print(batch["image"])
-#print(batch["label"])
-#print(seed_logs)
-
-
 augmented_partitions = dataset.augment_dataset(0)
 dataloader_train_part1, dataloader_test_part1, seed_logs = dataset.generate_dataloader_for_dataset(augmented_partitions[1])
 
-plot_dataloader_batch(dataloader_train_part1)
+batch = next(iter(dataloader_train_part1))
+print(batch["image"])
+print(batch["label"])
+print(seed_logs)
+
+#plot_dataloader_batch(dataloader_train_part1)
