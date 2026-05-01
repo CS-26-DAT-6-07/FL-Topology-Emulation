@@ -17,6 +17,22 @@ from flwr_datasets.visualization import plot_label_distributions
 #Constants
 SIZE_IMG = 299
 
+#Pickable unlike a nested function / For Pytorch dataloader
+class SeedWorker:
+    def __init__(self, split_name, seeds_list):
+        self.split_name = split_name
+        self.seeds_list = seeds_list
+    
+    def __call__(self, worker_id):
+        worker_seed = torch.initial_seed() % 2**32
+        np.random.seed(worker_seed)
+        random.seed(worker_seed)
+        self.seeds_list.append({
+            "split": self.split_name,
+            "worker_id": worker_id,
+            "seed": worker_seed
+        })
+
 class FedISIC2019_Dataset():
     fds = None
     labels = None
@@ -274,7 +290,7 @@ class FedISIC2019_Dataset():
             batch_size=32,
             shuffle=True,
             generator=generator,
-            worker_init_fn=make_seed_worker("train", train_worker_seeds),
+            worker_init_fn=SeedWorker("train", train_worker_seeds),
             num_workers=4
         )
 
@@ -282,7 +298,7 @@ class FedISIC2019_Dataset():
             partition_test,
             batch_size=32,
             shuffle=False,
-            worker_init_fn=make_seed_worker("test", test_worker_seeds),
+            worker_init_fn=SeedWorker("test", test_worker_seeds),
             num_workers=4
         )
 
@@ -312,7 +328,7 @@ def plot_dataloader_batch(dataloader, num_images=8):
         plt.tight_layout()
         plt.show()
   
-dataset = FedISIC2019_Dataset(67)
+#dataset = FedISIC2019_Dataset(67)
 
 #print(dataset.fds.load_partition(0, "train")[0])
 
@@ -330,11 +346,13 @@ dataset = FedISIC2019_Dataset(67)
 ##dataset.plot_in_partitions_train_class_distribution()
 #dataset.augment_dataset(0)
 
+if __name__ == "__main__":
+    dataset = FedISIC2019_Dataset(67)
 
-augmented_partitions = dataset.augment_dataset(0)
-dataloader_train_part1, dataloader_test_part1, train_worker_seeds, test_worker_seeds = dataset.generate_dataloader_for_dataset(augmented_partitions[1])
+    augmented_partitions = dataset.augment_dataset(0)
+    dataloader_train_part1, dataloader_test_part1, train_worker_seeds, test_worker_seeds = dataset.generate_dataloader_for_dataset(augmented_partitions[1])
 
-#batch = next(iter(dataloader_train_part1))
+    #batch = next(iter(dataloader_train_part1))
 
-plot_dataloader_batch(dataloader_train_part1)
-print({"train": list(train_worker_seeds), "test": list(test_worker_seeds)})
+    plot_dataloader_batch(dataloader_train_part1)
+    print({"train": list(train_worker_seeds), "test": list(test_worker_seeds)})
