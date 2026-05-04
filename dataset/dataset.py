@@ -88,8 +88,7 @@ class FedISIC2019_Dataset():
     
     def augment_dataset(self, representative):
         self.augmented_dataset_partitions = self.__apply_augmentations(representative=representative, quiet=False)
-        return self.augmented_dataset_partitions
-         
+        return self.augmented_dataset_partitions        
 
     def __apply_augmentations(self, representative, quiet = True):
         amt_labels = 8
@@ -115,28 +114,29 @@ class FedISIC2019_Dataset():
             if(not quiet):
                 print(f"augmenting partition {i}")
             if(i == representative):
-                for row in data[representative]:
-                    temp_img = self.apply_train_val_test_standard_transform(row["image"])
-                    tensorified_temp_img = self.__to_torch_tensor(temp_img)
-
-                    new_train[i].append({"center":representative ,"label":row["label"],"image":tensorified_temp_img})
+                #for row in data[representative]:
+                #    temp_img = self.apply_train_val_test_standard_transform(row["image"])
+                #    tensorified_temp_img = self.__to_torch_tensor(temp_img)
+                #    new_train[i].append({"center":representative ,"label":row["label"],"image":tensorified_temp_img})
+                #data[i] = datasets.Dataset.from_list(new_train[i]).with_format("torch")   
+                data[i] = data[i].map(self.__transform_image)
                 continue    
 
             missing_label_percentage = 0
             #...add the missing_label_percentage of the labels that dont exist in the partition, then...
-            for j in [x for x in range(0,amt_labels) if np.isclose(distributions[i][x],0)]:
+            for j in [x for x in range(0,amt_labels) if distributions[i][x] == 0]:
                 missing_label_percentage += distributions[representative][j]
-            #n = [0 for i in range(0, amt_labels)]
+            ns = [0 for i in range(0, amt_labels)]
             #...for the labels that do exist...
-            for j in [x for x in range(0,amt_labels) if not np.isclose(distributions[i][x],0)]:
+            for j in [x for x in range(0,amt_labels) if not distributions[i][x] == 0]:
                 #...calculate the number of pictures to add/remove from the set...
                 #Ratio (r) = desired ration of label/The_total_ratio_of_existing_labels_in_partition (1 - missing_label_percentage)
                 #Number of images to add or remove (n) = (r * all_samples_in_partition)/The_total_ratio_of_existing_labels_in_partition - number_of_n_label_img_in_partition
-                n = math.ceil((distributions[representative][j]/np.round((1 - missing_label_percentage)))*data[i].num_rows - num_labels[i][j])
-                
+                n = math.ceil((distributions[representative][j]/(1 - missing_label_percentage))*data[i].num_rows - num_labels[i][j])
+                ns[j] = n
                 temp = data[i].filter(lambda e: e['label'] == j)
                 if(n > 0):
-                    new_train[i] = [{"center":i,"label":j,"image":self.__to_torch_tensor(self.apply_train_val_test_standard_transform(row["image"]))} for row in temp]
+                    new_train[i] += [{"center":i,"label":j,"image":self.__to_torch_tensor(self.apply_train_val_test_standard_transform(row["image"]))} for row in temp]
                     elem = temp.select([np.random.randint(0,temp.num_rows) for _ in range(0, n)])
                     for m in range(0, n):
                         transformed_image = self.apply_oversampling_train_transform(elem[m]["image"])
@@ -148,12 +148,16 @@ class FedISIC2019_Dataset():
                         if(x not in rmv):
                             new_train[i].append({"center":i,"label":j,"image":self.__to_torch_tensor(self.apply_train_val_test_standard_transform(temp[x]["image"]))})
             data[i] = datasets.Dataset.from_list(new_train[i]).with_format("torch")
+            print(ns)
+            print(sum(ns))
         if(not quiet):
             print("augmenting complete")
         
 
         return data
-
+    def __transform_image(self, example):
+       example['image'] = self.__to_torch_tensor(self.apply_train_val_test_standard_transform(example['image']))
+       return example
 
     def __calc_distr(self, num_labels, total_examples):
         return [x/total_examples for x in num_labels]
