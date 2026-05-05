@@ -77,6 +77,26 @@ class FedISIC2019_Dataset():
         
         return augmented_pil_img
     
+    def apply_oversampling_train_transform(self, pil_img):
+        transform = albumentations.Compose([
+            albumentations.RandomScale(0.07),
+            albumentations.RandomRotate90(),
+            albumentations.ShiftScaleRotate(),
+            albumentations.PadIfNeeded(min_height=SIZE_IMG, min_width=SIZE_IMG, border_mode=0),
+            albumentations.CenterCrop(height=SIZE_IMG, width=SIZE_IMG),
+        ], seed=self.seed)
+
+        #Taking the Pillow formated image from the dataset and make it into a Numpy Array
+        img_np = self.__to_numpy(pil_img)
+        
+        #Applying the transform
+        augmented = transform(image=img_np)["image"]
+
+        #Transforming back into PIL Image for memory conservation
+        augmented_pil_img = Image.fromarray(augmented)
+        
+        return augmented_pil_img
+    
     def __map_image_to_standard_transformed_image(self, row):
         row["image"] = self.apply_train_val_test_standard_transform(row["image"])
         return row
@@ -110,6 +130,75 @@ class FedISIC2019_Dataset():
             pc_list[i] = partition_change_list
 
         return pc_list
+    
+    def augment_partition(self, partition_id: int, partition_change_list: list, quiet_output = True):
+        if(not quiet_output):
+            print(f"Augmenting Partition {partition_id}")
+        
+        partition_data = self.fds.load_partition(partition_id, "train")
+
+        #Adding oversampled images
+        new_train = []
+        for label_index, partition_label_change in enumerate(partition_change_list):
+            if partition_label_change > 0:
+                temp_filtered_ds = partition_data.filter(lambda row: row["label"] == label_index, num_proc=4)
+                temp_to_transform = temp_filtered_ds.select([np.random.randint(0,temp_filtered_ds.num_rows) for _ in range(partition_label_change)])
+                new_train.extend({"center":partition_id,"label":label_index,"image":self.apply_oversampling_train_transform(row["image"])} for row in temp_to_transform)
+
+                #Freeing memory
+                temp_filtered_ds = []
+                temp_to_transform = []
+
+        #Guarding against an empty new_train from the representative partition
+        new_partition_ds = None
+        if new_train:    
+            new_train_ds = datasets.Dataset.from_list(new_train)
+            new_train = []
+
+            #Casting the features to match the original dataset
+            new_train_ds = new_train_ds.cast(partition_data.features)
+
+            new_partition_ds =  datasets.concatenate_datasets([partition_data, new_train_ds])
+        else:
+            new_partition_ds = partition_data    
+        
+        new_partition_ds.save_to_disk(f"dataset_proccesed_data/partition{partition_id}")
+        new_partition_ds = []
+
+
+        #Removing unnecessary images
+        new_partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_id}")
+
+        temp_to_rmv = []
+        for label_index, partition_label_change in enumerate(partition_change_list):
+            if partition_label_change < 0:
+                temp_filtered_ds = new_partition_data.filter(lambda row: row["label"] == label_index, num_proc=4)
+
+                rows_indicies_to_remove = np.random.choice([x for x in range(0, temp_filtered_ds.num_rows)],abs(partition_label_change), replace=False)
+                temp_rows_dataset = temp_filtered_ds.select(rows_indicies_to_remove)
+                for row in temp_rows_dataset:
+                    temp_to_rmv.append(row)
+                
+                temp_filtered_ds = [] #Free memory
+            
+            # Build a set of fingerprints from rows to remove
+            fingerprints_to_remove = set()
+            for row in temp_to_rmv:
+                img_bytes = np.array(row["image"]).tobytes()
+                fingerprints_to_remove.add((row["center"], row["label"], img_bytes))
+
+        def should_keep(row):
+            img_bytes = np.array(row["image"]).tobytes()
+            return (row["center"], row["label"], img_bytes) not in fingerprints_to_remove
+
+        new_partition_ds = new_partition_data.filter(should_keep, num_proc=1)  # num_proc=1 since fingerprints_to_remove can't be pickled
+        new_partition_ds = new_partition_ds.cast(new_partition_data.features)
+        temp_to_rmv = [] # Free memory
+
+        return new_partition_ds
+
+
+
 
 
     def augment_dataset(self, representative_partition: int, quiet_output = False):
@@ -133,8 +222,15 @@ class FedISIC2019_Dataset():
         distributions = [self.__calc_distr(partition_label_counts[i],partition_total_samples[i]) for i in range(num_of_partitions)]
         partition_change_lists = self.__calc_partition_change_list(distributions, partition_total_samples, partition_label_counts, num_of_partitions, representative_partition)
 
-        print(distributions)
-        print(partition_change_lists)
+        
+        #Stage 3 - Adding/Removing images
+        for partition_index in range(num_of_partitions):
+            augmented_partition = self.augment_partition(partition_id=partition_index, partition_change_list=partition_change_lists[partition_index], quiet_output=quiet_output)
+            augmented_partition.save_to_disk(f"dataset_proccesed_data/partition{partition_index}_augmented")
+            if(not quiet_output):
+                print(f"Finished Augmenting Partition{partition_index}")
+            
+
 
 
         return
