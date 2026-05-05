@@ -7,7 +7,7 @@ import albumentations
 import csv
 import datasets
 import multiprocessing
-from collections import defaultdict
+import os
 
 from torch.utils.data import Dataset, DataLoader
 from flwr_datasets import FederatedDataset
@@ -91,6 +91,13 @@ class FedISIC2019_Dataset():
         return self.augmented_dataset_partitions        
 
     def __apply_augmentations(self, representative, quiet = True):
+        dataset_path = f"dataset/augmented_train/{self.seed}"
+        if(os.path.isdir(dataset_path)):
+            data = []
+            for dir in os.listdir(f"{dataset_path}/{self.seed}"):
+                data = data.append(datasets.load_from_disk(dir))
+            return data
+
         amt_labels = 8
 
         partitions = self.fds.partitioners["train"]
@@ -166,8 +173,14 @@ class FedISIC2019_Dataset():
         if(not quiet):
             print("augmenting complete")
         
+        for datasets in data:
+            os.mkdir(dataset_path)
+            for i in range(0, partitions.num_partitions):
+                data[i].save_to_disk(dataset_path=f"{dataset_path}")
+
 
         return data
+
     def __transform_image(self, example):
        example['image'] = self.__to_torch_tensor(self.apply_train_val_test_standard_transform(example['image']))
        return example
