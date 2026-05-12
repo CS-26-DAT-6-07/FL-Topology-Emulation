@@ -17,6 +17,8 @@ from flwr_datasets.visualization import plot_label_distributions
 #Constants
 SIZE_IMG = 299
 
+
+
 #Pickable unlike a nested function / For Pytorch dataloader
 class SeedWorker:
     def __init__(self, split_name, seeds_list):
@@ -42,6 +44,7 @@ class FedISIC2019_Dataset():
     seed = None
     normalize_transform = None
     _dataset_is_augmented = False
+    dataloaders = None
 
     def __init__(self, seed: int):
         self.seed = seed
@@ -262,6 +265,7 @@ class FedISIC2019_Dataset():
         ]
         return batch
     
+
     def generate_dataloader_for_dataset(self, partition_dataset: Dataset):
         partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch)
 
@@ -296,6 +300,12 @@ class FedISIC2019_Dataset():
         )
 
         return dataloader_train, dataloader_test, train_worker_seeds, test_worker_seeds
+    
+    def load_partition(self,partition):
+        if self.dataloaders == None:
+            self.dataloaders, self.worker_seeds = self.generate_all_dataloaders(0)
+            self.fds = None
+        return self.dataloaders[partition]
 
     def plot_in_partitions_train_class_distribution(self):
         partitioner = self.fds.partitioners["train"]
@@ -417,7 +427,22 @@ class FedISIC2019_Dataset():
         plt.show()
 
         return
+    
+    def generate_all_dataloaders(self,rep):
+        self.augment_dataset(rep)
+        num_of_partitions = self.fds.partitioners["train"].num_partitions
+        worker_seeds = []
+        dataloaders = []
 
+        for i in range(num_of_partitions):
+            dataset = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{i}_augmented")
+            dataloader_train, dataloader_test, train_worker_seeds, test_worker_seeds = self.generate_dataloader_for_dataset(dataset)
+            dataloaders.append((dataloader_train,dataloader_test))
+            worker_seeds.append((train_worker_seeds,test_worker_seeds))
+        
+        return dataloaders, worker_seeds
+
+        
 
 def plot_dataloader_batch(dataloader, num_images=8):
         # Grab one batch
@@ -440,6 +465,7 @@ def plot_dataloader_batch(dataloader, num_images=8):
         plt.tight_layout()
         plt.show()
 
+
 if __name__ == "__main__":
     dataset = FedISIC2019_Dataset(67)
 
@@ -450,3 +476,4 @@ if __name__ == "__main__":
 
     plot_dataloader_batch(dataloader_train_part1)
     print({"DatasetObjSeed": dataset.seed, "train": list(train_worker_seeds), "test": list(test_worker_seeds)})
+    dataset.plot_in_partitions_augmented_train_class_distribution(0)
