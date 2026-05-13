@@ -9,8 +9,11 @@ from pytorchexample.custom_strategy import CustomStrategy
 from pytorchexample.task import Net, test
 from pytorchexample.models.xception import xception
 from pytorchexample.dataset.dataset import load_centralized_dataset, init_dataset
+<<<<<<< HEAD
 
 init_dataset(seed=42,rep=0)
+=======
+>>>>>>> 33aa44a10b1ef46ffe3a724a9cb88ff01933e100
 
 # Create ServerApp
 app = ServerApp()
@@ -24,7 +27,7 @@ EDGE_GROUPS = {
 @app.main()
 def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
-
+    init_dataset(seed=42,rep=0)
     # Read run config
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
     num_rounds: int = context.run_config["num-server-rounds"]
