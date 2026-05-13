@@ -24,6 +24,14 @@ dependencies = [
 # address = ":local:"
 # options.num-supernodes = 6
 
+[tool.flwr.app.config.static]
+num-supernodes = 2  #CHANGE BACK TO 6. Or remove this entirely
+
+[tool.flwr.app.resources]
+#No matter how many clients are waiting (6 or 100), only allow one to use the CPU and GPU at any given time
+num-cpus = 1.0
+num-gpus = 1.0
+
 [tool.hatch.build.targets.wheel]
 packages = ["."]
 
@@ -41,4 +49,4 @@ fraction-evaluate = 0
 local-epochs = 1
 learning-rate = 0.01
 batch-size = 2
-num-clients = 1
+# num-clients = 2 

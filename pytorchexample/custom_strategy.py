@@ -16,7 +16,7 @@ class CustomStrategy(FedAvg):
         super().__init__(*args, **kwargs)
         self.edge_groups = edge_groups
 
-    # This signature is the most compatible for Flower 1.26+
+    #A bunch of stuff had to change to fit flower 1.29
     def configure_train(
         self, 
         server_round: int, 
@@ -51,10 +51,22 @@ class CustomStrategy(FedAvg):
         # STEP 1: EXTRACT FEATURE VECTORS
         client_ids = []
         feature_vectors = []
+        valid_replies = [] #Keep track of replies that didn't crash
+
         for reply in replies_list:
+
+            #Check if the message has content (it won't if the client crashed)
+            if not reply.has_content():
+                print(f"Empty message received in round {server_round}. Skipping client.")
+                continue
+
             metrics = reply.content.get("metrics", {})
             client_ids.append(int(metrics.get("partition_id", 0)))
             feature_vectors.append(metrics.get("feature_vector", []))
+            valid_replies.append(reply)
+
+        if not valid_replies:
+            return None, None
 
         # STEP 2: RUN K-MEANS CLUSTERING
         X = np.array(feature_vectors)
@@ -83,16 +95,16 @@ class CustomStrategy(FedAvg):
 
         print(f"\nNew clustered edge groups: {self.edge_groups}") #Print the edge groups every round
 
-        # STEP 4: GROUP REPLIES BY EDGE SERVER
+        #STEP 4: GROUP REPLIES BY EDGE SERVER
         edge_replies = {0: [], 1: []}
-        for reply in replies_list:
+        for reply in valid_replies:
             partid = int(reply.content["metrics"]["partition_id"])
             for edge_id, group in self.edge_groups.items():
                 if partid in group:
                     edge_replies[edge_id].append(reply)
                     break
 
-        # STEP 5 & 6: AGGREGATE PER EDGE AND THEN GLOBALLY
+        #STEP 5 & 6: AGGREGATE PER EDGE AND THEN GLOBALLY
         edge_aggregates = []
         for edge_id, group_messages in edge_replies.items():
             if not group_messages:

@@ -31,7 +31,6 @@ def apply_train_transforms(batch):
     train_transforms = albumentations.Compose(
         [
             albumentations.Resize(333, 333), # Ensure the image is large enough
-            albumentations.RandomCrop(height=299, width=299),
             albumentations.RandomScale(scale_limit=0.07, p=1.0),
             albumentations.Rotate(limit=50, p=1.0),
             albumentations.RandomBrightnessContrast(
@@ -106,7 +105,7 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int):
     return trainloader, testloader
 
 
-def load_centralized_dataset(batch_size: int = 16): #I changed batch_size from 128 to 32 
+def load_centralized_dataset(batch_size: int = 16): #I changed batch_size from 128 to 16
     """Load the full centralized test set for server-side evaluation."""
     test_dataset = load_dataset("flwrlabs/fed-isic2019", split="test")
     test_dataset = test_dataset.with_transform(apply_test_transforms)
