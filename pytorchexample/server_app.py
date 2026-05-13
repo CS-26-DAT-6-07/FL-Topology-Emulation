@@ -9,11 +9,8 @@ from pytorchexample.custom_strategy import CustomStrategy
 from pytorchexample.task import Net, test
 from pytorchexample.models.xception import xception
 from pytorchexample.dataset.dataset import load_centralized_dataset, init_dataset
-<<<<<<< HEAD
 
 init_dataset(seed=42,rep=0)
-=======
->>>>>>> 33aa44a10b1ef46ffe3a724a9cb88ff01933e100
 
 # Create ServerApp
 app = ServerApp()
