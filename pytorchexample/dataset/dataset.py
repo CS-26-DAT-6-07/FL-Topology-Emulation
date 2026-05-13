@@ -10,7 +10,6 @@ from PIL import Image
 import multiprocessing
 import os
 
-
 from torch.utils.data import DataLoader
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import NaturalIdPartitioner
@@ -47,6 +46,7 @@ class FedISIC2019_Dataset():
     normalize_transform = None
     _dataset_is_augmented = False
     dataloaders = None
+    global_dataloader = None
 
     def __init__(self, seed: int):
         self.seed = seed
@@ -267,9 +267,13 @@ class FedISIC2019_Dataset():
         ]
         return batch
     
+    def test_dataset_transform(self, batch):
+        batch = [self.__map_image_to_standard_transformed_image(e) for e in batch]
+        self.normalize_and_tensorify_batch(batch)
+        return batch
 
     def generate_dataloader_for_dataset(self, partition_dataset: Dataset):
-        partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch)
+        partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch).with_format('torch')
 
         partition_train_test = partition_dataset.train_test_split(test_size=0.2, seed=self.seed)
         partition_train = partition_train_test["train"]
@@ -455,7 +459,25 @@ def load_partition(partition):
 
 def load_centralized_dataset():
     global dataset
-    return dataset.fds.load_split(split = "test")
+    if dataset.global_dataloader == None:
+        generator = torch.Generator()
+        generator.manual_seed(dataset.seed)
+
+        #Setting up shared list across processes
+        mp_manager = multiprocessing.Manager()
+        test_worker_seeds = mp_manager.list()
+
+        dataset.global_dataloader = DataLoader(
+                dataset=dataset.fds.load_split(split = "test").with_transform(dataset.test_dataset_transform).with_format('torch'),
+                batch_size=32,
+                shuffle=False,
+                worker_init_fn=SeedWorker("test", test_worker_seeds),
+                num_workers=4
+            )
+
+    return dataset.global_dataloader
+
+
 
 def plot_dataloader_batch(dataloader, num_images=8):
         # Grab one batch
