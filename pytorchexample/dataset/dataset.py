@@ -129,6 +129,9 @@ class FedISIC2019_Dataset():
         row["image"] = self.apply_train_val_test_standard_transform(row["image"])
         return row
     
+    def wrapper_mitosti(self, row):
+        return self.__map_image_to_standard_transformed_image(row)
+
     def __calc_distr(self, num_labels, total_examples):
         return [x/total_examples for x in num_labels]
     
@@ -262,7 +265,7 @@ class FedISIC2019_Dataset():
 
     def normalize_and_tensorify_batch(self, batch):
         batch["image"] = [
-            self.normalize_transform(image=self.__to_numpy(img))["image"]
+            self.normalize_transform(image=self.__to_numpy(img))["image"].to(dtype=torch.double)
             for img in batch["image"]
         ]
         return batch
@@ -460,7 +463,7 @@ def load_partition(partition):
 def load_centralized_dataset():
     global dataset
     if dataset.global_dataloader == None:
-        temp = dataset.fds.load_split(split = "test").map(dataset.__map_image_to_standard_transformed_image)
+        temp = dataset.fds.load_split(split = "test").map(dataset.wrapper_mitosti)
         dataset.global_dataloader = DataLoader(
                 dataset=temp.with_transform(dataset.normalize_and_tensorify_batch),#dataset.fds.load_split(split = "test").with_transform(dataset.normalize_and_tensorify_batch),
                 batch_size=32,
