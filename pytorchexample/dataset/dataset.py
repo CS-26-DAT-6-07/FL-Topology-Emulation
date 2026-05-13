@@ -460,19 +460,10 @@ def load_partition(partition):
 def load_centralized_dataset():
     global dataset
     if dataset.global_dataloader == None:
-        generator = torch.Generator()
-        generator.manual_seed(dataset.seed)
-
-        #Setting up shared list across processes
-        mp_manager = multiprocessing.Manager()
-        test_worker_seeds = mp_manager.list()
-
         dataset.global_dataloader = DataLoader(
                 dataset=dataset.fds.load_split(split = "test").with_transform(dataset.test_dataset_transform).with_format('torch'),
                 batch_size=32,
-                shuffle=False,
-                worker_init_fn=SeedWorker("test", test_worker_seeds),
-                num_workers=4
+                shuffle=False
             )
 
     return dataset.global_dataloader
