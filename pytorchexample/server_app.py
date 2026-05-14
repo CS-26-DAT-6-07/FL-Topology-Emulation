@@ -58,7 +58,6 @@ def main(grid: Grid, context: Context) -> None:
         train_config=ConfigRecord({"lr": lr}),
         num_rounds=num_rounds,
         evaluate_fn=global_evaluate,
-        #TODO add control variate
     )
 
     # Save final model to disk

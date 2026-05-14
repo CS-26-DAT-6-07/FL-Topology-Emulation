@@ -130,37 +130,61 @@ def load_centralized_dataset(batch_size: int = 128):
 
 
 def train(net, trainloader, epochs, lr, device):
-    """Train the model on the training set."""
+    """Train the model on the training set (standard FedAvg / FedProx)."""
     net.to(device)
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
-
-    control_variate = #TODO implement getting the control variate during training as a function
-
+ 
     net.train()
     running_loss = 0.0
-
+ 
     for _ in range(epochs):
         for batch in trainloader:
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
-
+ 
             optimizer.zero_grad()
             outputs = net(images)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            control_variate()
-
+ 
             running_loss += loss.item()
-
-
-
-    avg_cv_loss = #TODO compute control variate loss here
-
+ 
     avg_train_loss = running_loss / (epochs * len(trainloader))
-    return avg_train_loss, avg_cv_loss
+    return avg_train_loss
 
+def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
+    net.to(device)
+    criterion = nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.0)
+ 
+    # TODO Save initial global parameters
+
+    net.train()
+    running_loss = 0.0
+ 
+    for _ in range(epochs):
+        for batch in trainloader:
+            images = batch["image"].to(device)
+            labels = batch["label"].to(device)
+ 
+            optimizer.zero_grad()
+            outputs = net(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+
+            #TODO scaffold gradient correction
+
+            optimizer.step()
+ 
+            running_loss += loss.item()
+ 
+    avg_train_loss = running_loss / (epochs * len(trainloader))
+
+    #TODO control variate update & add outputs
+
+    return avg_train_loss
 
 def test(net, testloader, device):
     """Evaluate the model on the test set."""

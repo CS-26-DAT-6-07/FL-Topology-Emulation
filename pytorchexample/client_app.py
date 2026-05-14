@@ -28,10 +28,18 @@ def train(msg: Message, context: Context):
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
     trainloader, _ = load_partition(partition_id)
+
     # Load control variate from message content
-    control_variate = msg.content.get("control_variate")
+    global_control_variate = context.state["control_variate"].to_torch_state_dict()
+
+    # Initialize/load client control variate
+    if "local_control_variate" in context.state:
+        cv_local = context.state["local_control_variate"].to_torch_state_dict()
+    else:
+        cv_local = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
 
     # Call the training function
+    """
     train_loss = train_fn(
         model,
         trainloader,
@@ -39,9 +47,13 @@ def train(msg: Message, context: Context):
         msg.content["config"]["lr"],
         device,
     )
-
+    
     feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
+    """
+    
+    # TODO Call the scaffold training function
 
+    # TODO Update client control variate for next round
 
     # Construct and return reply Message
     model_record = ArrayRecord(model.state_dict())
@@ -50,10 +62,13 @@ def train(msg: Message, context: Context):
         "num-examples": len(trainloader.dataset),
         "feature_vector": feature_vector,
         "partition_id": partition_id,
-        "control_variate_loss": control_variate_loss,
     }
+    control_variate_update = ArrayRecord(cv_update)
     metric_record = MetricRecord(metrics)
-    content = RecordDict({"arrays": model_record, "metrics": metric_record})
+    content = RecordDict({
+        "arrays": model_record,
+        "control_variate": control_variate_update,
+        "metrics": metric_record})
     return Message(content=content, reply_to=msg)
 
 

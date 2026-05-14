@@ -198,4 +198,3 @@ class Scaffold(FedAvg):
                 self.weighted_by_key,
             )
         return arrays, metrics
-
