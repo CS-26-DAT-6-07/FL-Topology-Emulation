@@ -197,12 +197,12 @@ class FedISIC2019_Dataset():
         else:
             new_partition_ds = standardized_partition_data    
         
-        new_partition_ds.save_to_disk(f"dataset_proccesed_data/partition{partition_id}")
+        new_partition_ds.save_to_disk(f"dataset_proccesed_data/partition{partition_id}_temp")
         new_partition_ds = []
 
 
         #Removing unnecessary images
-        new_partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_id}")
+        new_partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_id}_temp")
 
         temp_to_rmv = []
         for label_index, partition_label_change in enumerate(partition_change_list):
