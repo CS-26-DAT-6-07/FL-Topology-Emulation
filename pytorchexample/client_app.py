@@ -30,13 +30,13 @@ def train(msg: Message, context: Context):
     trainloader, _ = load_partition(partition_id)
 
     # Load control variate from message content
-    global_control_variate = context.state["control_variate"].to_torch_state_dict()
+    global_control_variate = context.state["global_cv"].to_torch_state_dict()
 
     # Initialize/load client control variate
-    if "local_control_variate" in context.state:
-        cv_local = context.state["local_control_variate"].to_torch_state_dict()
+    if "local_cv" in context.state:
+        local_control_variate = context.state["local_cv"].to_torch_state_dict()
     else:
-        cv_local = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
+        local_control_variate = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
 
     # Call the training function
     """
@@ -51,9 +51,19 @@ def train(msg: Message, context: Context):
     feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
     """
     
-    # TODO Call the scaffold training function
+    # Call the scaffold training function
+    train_loss, something, new_local_cv, cv_diff = scaffold_train(
+        model,
+        trainloader,
+        context.run_config["local-epochs"],
+        msg.content["config"]["lr"],
+        device,
+        global_control_variate,
+        local_control_variate
+    )
 
-    # TODO Update client control variate for next round
+    #save updated local control variate in client state for next round
+    context.state["local_cv"] = ArrayRecord(new_local_cv)   
 
     # Construct and return reply Message
     model_record = ArrayRecord(model.state_dict())
@@ -63,8 +73,9 @@ def train(msg: Message, context: Context):
         "feature_vector": feature_vector,
         "partition_id": partition_id,
     }
-    control_variate_update = ArrayRecord(cv_update)
+    control_variate_update = ArrayRecord(cv_diff)
     metric_record = MetricRecord(metrics)
+    
     content = RecordDict({
         "arrays": model_record,
         "control_variate": control_variate_update,

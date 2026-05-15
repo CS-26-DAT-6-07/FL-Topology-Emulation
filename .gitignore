@@ -1,3 +1,4 @@
+.conda
 .venv/
 .vscode/
 __pycache__/

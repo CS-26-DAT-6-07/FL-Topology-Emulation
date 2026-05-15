@@ -170,7 +170,7 @@ class Scaffold(FedAvg):
             {
                 "arrays": self.initial_parameters,
                 "config": config,
-                "control_variate": ArrayRecord(self.global_cv),
+                "global_cv": ArrayRecord(self.global_cv),
             }
         )
 
