@@ -34,11 +34,12 @@ def main(grid: Grid, context: Context) -> None:
     arrays = ArrayRecord(global_model.state_dict())
 
     #Initialize strategy
+    """
     strategy = TreeStrategy(
         edge_groups=EDGE_GROUPS,
         fraction_evaluate=fraction_evaluate,
     )
-
+    """
     strategy = Scaffold(
         initial_parameters=arrays,
         lr=lr,

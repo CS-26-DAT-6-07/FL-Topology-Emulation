@@ -1,6 +1,10 @@
 from sklearn.cluster import KMeans
 import numpy as np
 
+from collections.abc import Iterable
+
+from flwr.app import ArrayRecord, ConfigRecord, Context, Message, RecordDict
+from flwr.serverapp import Grid
 from flwr.serverapp.strategy import FedAvg
 from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters
 
@@ -174,8 +178,8 @@ class Scaffold(FedAvg):
             }
         )
 
-    #Construct and return messages to clients
-    return self._construct_messages(record, node_ids, MessageType.TRAIN)
+        #Construct and return messages to clients
+        return self._construct_messages(record, node_ids, MessageType.TRAIN)
     
     """aggregate client updates - update global model and control variate"""
     def aggregate_train(
