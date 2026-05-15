@@ -144,7 +144,7 @@ def train(net, trainloader, epochs, lr, device):
             labels = batch["label"].to(device)
 
             optimizer.zero_grad()
-            outputs = net(images)
+            outputs = net(images.float())
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -169,7 +169,7 @@ def test(net, testloader, device):
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
 
-            outputs = net(images)
+            outputs = net(images.float())
             loss += criterion(outputs, labels).item()
             correct += (outputs.argmax(dim=1) == labels).sum().item()
 

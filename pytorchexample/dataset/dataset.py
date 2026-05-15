@@ -296,7 +296,7 @@ class FedISIC2019_Dataset():
         return batch
 
     def generate_dataloader_for_dataset(self, partition_dataset: Dataset):
-        partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch).with_format('torch')
+        partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch)
 
         partition_train_test = partition_dataset.train_test_split(test_size=0.2, seed=self.seed)
         partition_train = partition_train_test["train"]
