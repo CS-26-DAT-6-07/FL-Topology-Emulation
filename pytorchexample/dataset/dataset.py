@@ -47,6 +47,7 @@ class FedISIC2019_Dataset():
     _dataset_is_augmented = False
     dataloaders = None
     global_dataloader = None
+    __num_proc = 0
 
     def __init__(self, seed: int):
         self.seed = seed
@@ -172,7 +173,7 @@ class FedISIC2019_Dataset():
         new_train = []
         for label_index, partition_label_change in enumerate(partition_change_list):
             if partition_label_change > 0:
-                temp_filtered_ds = partition_data.filter(lambda row: row["label"] == label_index, num_proc=4)
+                temp_filtered_ds = partition_data.filter(lambda row: row["label"] == label_index, num_proc=self.__num_proc)
                 temp_to_transform = temp_filtered_ds.select([np.random.randint(0,temp_filtered_ds.num_rows) for _ in range(partition_label_change)])
                 new_train.extend({"center":partition_id,"label":label_index,"image":self.apply_oversampling_train_transform(row["image"])} for row in temp_to_transform)
 
@@ -203,7 +204,7 @@ class FedISIC2019_Dataset():
         temp_to_rmv = []
         for label_index, partition_label_change in enumerate(partition_change_list):
             if partition_label_change < 0:
-                temp_filtered_ds = new_partition_data.filter(lambda row: row["label"] == label_index, num_proc=4)
+                temp_filtered_ds = new_partition_data.filter(lambda row: row["label"] == label_index, num_proc=self.__num_proc)
 
                 rows_indicies_to_remove = np.random.choice([x for x in range(0, temp_filtered_ds.num_rows)],abs(partition_label_change), replace=False)
                 temp_rows_dataset = temp_filtered_ds.select(rows_indicies_to_remove)
@@ -222,7 +223,7 @@ class FedISIC2019_Dataset():
             img_bytes = np.array(row["image"]).tobytes()
             return (row["center"], row["label"], img_bytes) not in fingerprints_to_remove
 
-        new_partition_ds = new_partition_data.filter(should_keep, num_proc=1)  # num_proc=1 since fingerprints_to_remove can't be pickled
+        new_partition_ds = new_partition_data.filter(should_keep, num_proc=0)  # num_proc=0 since fingerprints_to_remove can't be pickled
         new_partition_ds = new_partition_ds.cast(new_partition_data.features)
         temp_to_rmv = [] # Free memory
 
@@ -237,7 +238,7 @@ class FedISIC2019_Dataset():
         for partition_index in range(num_of_partitions):
             partition_data = self.fds.load_partition(partition_id=partition_index, split="train")
             partition_label_counts[partition_index] = self.get_partition_label_count(partition=partition_data, partition_id=partition_index, quiet_output=quiet_output)
-            standardized_dataset = partition_data.map(self.__map_image_to_standard_transformed_image, num_proc=4)
+            standardized_dataset = partition_data.map(self.__map_image_to_standard_transformed_image, num_proc=self.__num_proc)
             standardized_dataset.save_to_disk(f"dataset_proccesed_data/partition{partition_index}")
         
 
