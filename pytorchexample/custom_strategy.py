@@ -183,12 +183,22 @@ class Scaffold(FedAvg):
         server_round: int,
         replies: Iterable[Message],
     ) -> ArrayRecord:
-        """Aggregate ArrayRecords and MetricRecords in the received Messages."""
         valid_replies, _ = self._check_and_log_replies(replies, is_train=True)
 
-        #TODO update global control variate using client updates
+        #build client control variate update dict
+        cv_difference: list[dict[str, torch.Tensor]] = [
+            reply.content["control_variate"].to_torch_state_dict() 
+            for reply in valid_replies
+            if "control_variate" in reply.content
+        ]
 
-        
+        #aggregate client control variates into global control variate update
+        if cv_difference and self.global_cv is not None:
+            total_clients = len(cv_difference)
+            with torch.no_grad():
+                for key in self.global_cv.keys():                                                          #loop through each layer of the model
+                    total_cv_diff = torch.stack([cv_diff[key] for cv_diff in cv_difference]).sum(dim=0)    #sum up the control variate differences for this layer across clients
+                    self.global_cv[key] = self.global_cv[key] + total_cv_diff / total_clients              #update global control variate by adding average client control variate difference
 
         #aggregate client model updates with FedAvg
         return super().aggregate_train(server_round, replies)
