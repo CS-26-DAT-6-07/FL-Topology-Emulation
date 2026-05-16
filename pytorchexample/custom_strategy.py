@@ -1,12 +1,14 @@
 from sklearn.cluster import KMeans
 import numpy as np
+import math
 
 from collections.abc import Iterable
 
 from flwr.app import ArrayRecord, ConfigRecord, Context, Message, RecordDict
 from flwr.serverapp import Grid
 from flwr.serverapp.strategy import FedAvg
-from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters
+from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters,FitIns
+from flwr.server.strategy.aggregate import aggregate
 
 
 class TreeStrategy(FedAvg):
@@ -208,3 +210,85 @@ class Scaffold(FedAvg):
         return super().aggregate_train(server_round, replies)
 
 
+class FedAvgCyclic(FedAvg):
+    def __init__(self, fraction_train = 1, fraction_evaluate = 1, min_train_nodes = 2, min_evaluate_nodes = 2, min_available_nodes = 2, weighted_by_key = "num-examples", arrayrecord_key = "arrays", configrecord_key = "config", train_metrics_aggr_fn = None, evaluate_metrics_aggr_fn = None):
+        super().__init__(fraction_train, fraction_evaluate, min_train_nodes, min_evaluate_nodes, min_available_nodes, weighted_by_key, arrayrecord_key, configrecord_key, train_metrics_aggr_fn, evaluate_metrics_aggr_fn)
+
+
+        self.micro_round = 0
+        self.thread_to_local_models = {}
+        self.thread_targets = {}
+        self.thread_to_client = {}
+
+    
+
+
+    def configure_fit(self, server_round, parameters, client_manager):
+        all_clients = client_manager.all()
+        sorted_cids = sorted(all_clients.keys())
+        self.num_clients = len(all_clients)
+        if(self.num_clients == None):
+            self.num_clients = len(sorted_cids)
+        num_of_threads = math.floor(self.fraction_fit*self.num_clients)
+        if num_of_threads == 0:
+            raise ValueError("fraction_fit must result in a non zero number of clients")
+
+        config = {}
+        if self.on_fit_config_fn is not None:
+            config = self.on_fit_config_fn(server_round)
+
+        if(server_round % self.num_clients == 0):
+            selected_clients = np.random.choice(sorted_cids,num_of_threads, replace=False)
+            for client in selected_clients:
+                self.thread_to_local_models[client] = parameters
+                self.thread_to_client[client] = client
+        
+        ins = []
+        
+
+        for thread_id, target_cid in self.thread_to_client.items():
+            target_cid = target_cid % self.num_clients
+            cid = sorted_cids[target_cid]
+            client_proxy = all_clients[cid]
+
+            fit_ins = FitIns(self.thread_to_local_models[thread_id],config)
+            ins.append((client_proxy, fit_ins))
+
+        return ins
+    
+    def aggregate_fit(self, server_round, results, failures):
+        
+        for client_proxy, fit_res in results:
+            cid = client_proxy.cid
+            tid = value_to_key(cid, self.thread_to_client)
+            if tid != None:
+                self.thread_to_local_models[tid] = fit_res.parameters
+                self.thread_to_client[tid] += 1
+
+        self.micro_round += 1
+        
+        if server_round % self.num_clients != 0 :
+            return None, {}
+
+        weights_results = [
+                (parameters_to_ndarrays(fit_res.parameters), 1)
+                for _, fit_res in results
+            ]
+        aggregated_ndarrays = aggregate(weights_results)
+
+        parameters_aggregated = ndarrays_to_parameters(aggregated_ndarrays)
+
+        # Aggregate custom metrics if aggregation fn was provided
+        metrics_aggregated = {}
+        if self.fit_metrics_aggregation_fn:
+            fit_metrics = [(res.num_examples, res.metrics) for _, res in results]
+            metrics_aggregated = self.fit_metrics_aggregation_fn(fit_metrics)
+
+        return parameters_aggregated, metrics_aggregated
+    
+def value_to_key(str, dict):
+    ret = None
+    for key in dict :
+        if(dict[key] == str):
+            ret = key
+    return ret
