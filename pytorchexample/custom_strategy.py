@@ -4,11 +4,12 @@ import math
 
 from collections.abc import Iterable
 
-from flwr.app import ArrayRecord, ConfigRecord, Context, Message, RecordDict
+from flwr.app import ArrayRecord, ConfigRecord, Context, Message, RecordDict, MessageType
 from flwr.serverapp import Grid
 from flwr.serverapp.strategy import FedAvg
-from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters,FitIns
+from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters, FitIns
 from flwr.server.strategy.aggregate import aggregate
+from flwr.serverapp.strategy.strategy_utils import sample_nodes
 
 
 class TreeStrategy(FedAvg):
