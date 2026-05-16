@@ -1,5 +1,6 @@
 .conda
 .venv/
+venv/
 .vscode/
 __pycache__/
 dataset/dataset_proccesed_data/*

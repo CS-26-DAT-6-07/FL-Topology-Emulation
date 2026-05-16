@@ -1,5 +1,5 @@
 """pytorchexample: A Flower / PyTorch app."""
-
+print("---------------- DEBUG: client_app.py is working ---------------", flush=True) 
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
@@ -30,7 +30,7 @@ def train(msg: Message, context: Context):
     trainloader, _ = load_partition(partition_id)
 
     # Load control variate from message content
-    global_control_variate = context.state["global_cv"].to_torch_state_dict()
+    global_control_variate = msg.content["global_cv"].to_torch_state_dict()
 
     # Initialize/load client control variate
     if "local_cv" in context.state:

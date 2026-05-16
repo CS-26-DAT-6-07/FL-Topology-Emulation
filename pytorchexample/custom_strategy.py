@@ -1,3 +1,5 @@
+import math                         
+import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 import numpy as np
 
@@ -172,22 +174,23 @@ class Scaffold(FedAvg):
         #Construct message content with global model and control variate
         record = RecordDict(
             {
-                "arrays": self.initial_parameters,
+                "arrays": arrays,
                 "config": config,
                 "global_cv": ArrayRecord(self.global_cv),
             }
         )
 
         #Construct and return messages to clients
-        return self._construct_messages(record, node_ids, MessageType.TRAIN)
+        return [Message(content=record, dst_node_id=node_id, message_type=MessageType.TRAIN,) for node_id in node_ids]
     
     """aggregate client updates - update global model and control variate"""
     def aggregate_train(
         self,
         server_round: int,
         replies: Iterable[Message],
-    ) -> ArrayRecord:
-        valid_replies, _ = self._check_and_log_replies(replies, is_train=True)
+    ) -> Tuple[Optional[ArrayRecord], Optional[MetricRecord]]: #Flower 1.29 Fix: Use Tuple return type
+
+        valid_replies = [reply for reply in replies if reply.has_content()]
 
         #build client control variate update dict
         cv_difference: list[dict[str, torch.Tensor]] = [

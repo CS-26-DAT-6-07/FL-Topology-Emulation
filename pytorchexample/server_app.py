@@ -1,5 +1,5 @@
 """pytorchexample: A Flower / PyTorch app."""
-
+print("---------------- DEBUG: server_app.py is at least working ---------------", flush=True) 
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
@@ -10,7 +10,7 @@ from pytorchexample.task import Net, test
 from pytorchexample.models.xception import xception
 from pytorchexample.dataset.dataset import load_centralized_dataset, init_dataset
 
-init_dataset(seed=42,rep=0)
+#init_dataset(seed=42,rep=0)
 
 # Create ServerApp
 app = ServerApp()
@@ -23,7 +23,9 @@ EDGE_GROUPS = {
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
+    print("---------------- DEBUG: server_app.py main is working ---------------", flush=True) 
     """Main entry point for the ServerApp."""
+
     # Read run config
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
     num_rounds: int = context.run_config["num-server-rounds"]

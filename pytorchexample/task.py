@@ -197,7 +197,7 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
     avg_train_loss = running_loss / (epochs * len(trainloader))
 
     #update local model
-    updated_model = dict[str, torch.Tensor] = {
+    updated_model: dict[str, torch.Tensor] = {
         key: value.detach().clone() for key, value in net.state_dict().items()
         }
     
@@ -205,17 +205,23 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
     scaling_factor = 1.0 / (total_steps * lr)
 
     #compute new local control variate
-    new_local_cv = dict[str, torch.Tensor] = {}
-    cv_diff = dict[str, torch.Tensor] = {}
+    new_local_cv: dict[str, torch.Tensor] = {}
+    cv_diff: dict[str, torch.Tensor] = {}
 
+    
     with torch.no_grad():
         for key in init_global_params:
-            client_drift = init_global_params[key] - updated_model[key]                         #client drift
-            new_client_cv = local_cv[key] - global_cv[key] + scaling_factor * client_drift      #compute new cv for each client
-            new_local_cv[key] = new_client_cv                                                   #adding them all to a dict
-            cv_diff[key] = new_client_cv - local_cv[key]                                        #calculate cv difference
+            # 1. Calculate drift on the active training device (GPU/CPU)
+            client_drift = init_global_params[key] - updated_model[key]                         
+            
+            # 2. Explicitly move control variates to the same device for the math
+            new_client_cv = local_cv[key].to(device) - global_cv[key].to(device) + scaling_factor * client_drift      
+            
+            # 3. Bring them back to the CPU so Flower ca-+n package them safely
+            new_local_cv[key] = new_client_cv.cpu()                                                   
+            cv_diff[key] = (new_client_cv - local_cv[key].to(device)).cpu()                                        
 
-    return avg_train_loss, updated_model, new_local_cv, cv_diff
+    return avg_train_loss, net, new_local_cv, cv_diff
 
 def test(net, testloader, device):
     """Evaluate the model on the test set."""
