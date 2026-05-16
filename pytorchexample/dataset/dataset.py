@@ -9,6 +9,7 @@ from datasets import Dataset
 from PIL import Image
 import multiprocessing
 import os
+import json
 
 from torch.utils.data import DataLoader
 from flwr_datasets import FederatedDataset
@@ -47,6 +48,7 @@ class FedISIC2019_Dataset():
     _dataset_is_augmented = False
     dataloaders = None
     global_dataloader = None
+    __num_proc = 0
 
     def __init__(self, seed: int):
         self.seed = seed
@@ -168,11 +170,13 @@ class FedISIC2019_Dataset():
         
         partition_data = self.fds.load_partition(partition_id, "train")
 
+        standardized_partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_id}")
+
         #Adding oversampled images
         new_train = []
         for label_index, partition_label_change in enumerate(partition_change_list):
             if partition_label_change > 0:
-                temp_filtered_ds = partition_data.filter(lambda row: row["label"] == label_index, num_proc=4)
+                temp_filtered_ds = partition_data.filter(lambda row: row["label"] == label_index, num_proc=self.__num_proc)
                 temp_to_transform = temp_filtered_ds.select([np.random.randint(0,temp_filtered_ds.num_rows) for _ in range(partition_label_change)])
                 new_train.extend({"center":partition_id,"label":label_index,"image":self.apply_oversampling_train_transform(row["image"])} for row in temp_to_transform)
 
@@ -189,21 +193,21 @@ class FedISIC2019_Dataset():
             #Casting the features to match the original dataset
             new_train_ds = new_train_ds.cast(partition_data.features)
 
-            new_partition_ds =  datasets.concatenate_datasets([partition_data, new_train_ds])
+            new_partition_ds =  datasets.concatenate_datasets([standardized_partition_data, new_train_ds])
         else:
-            new_partition_ds = partition_data    
+            new_partition_ds = standardized_partition_data    
         
-        new_partition_ds.save_to_disk(f"dataset_proccesed_data/partition{partition_id}")
+        new_partition_ds.save_to_disk(f"dataset_proccesed_data/partition{partition_id}_temp")
         new_partition_ds = []
 
 
         #Removing unnecessary images
-        new_partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_id}")
+        new_partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_id}_temp")
 
         temp_to_rmv = []
         for label_index, partition_label_change in enumerate(partition_change_list):
             if partition_label_change < 0:
-                temp_filtered_ds = new_partition_data.filter(lambda row: row["label"] == label_index, num_proc=4)
+                temp_filtered_ds = new_partition_data.filter(lambda row: row["label"] == label_index, num_proc=self.__num_proc)
 
                 rows_indicies_to_remove = np.random.choice([x for x in range(0, temp_filtered_ds.num_rows)],abs(partition_label_change), replace=False)
                 temp_rows_dataset = temp_filtered_ds.select(rows_indicies_to_remove)
@@ -222,12 +226,27 @@ class FedISIC2019_Dataset():
             img_bytes = np.array(row["image"]).tobytes()
             return (row["center"], row["label"], img_bytes) not in fingerprints_to_remove
 
-        new_partition_ds = new_partition_data.filter(should_keep, num_proc=1)  # num_proc=1 since fingerprints_to_remove can't be pickled
+        new_partition_ds = new_partition_data.filter(should_keep, num_proc=0)  # num_proc=0 since fingerprints_to_remove can't be pickled
         new_partition_ds = new_partition_ds.cast(new_partition_data.features)
         temp_to_rmv = [] # Free memory
 
         return new_partition_ds
 
+    def __save_seed_totem(self):
+        seed_totem = {"seed": self.seed}
+        seed_totem = json.dumps(seed_totem)
+        with open("seed.json", "w") as f:
+            f.write(seed_totem)
+    
+    def __read_seed_totem(self):
+        if os.path.exists("seed.json"):   
+            seed_totem = None
+            with open("seed.json") as f:
+                seed_totem =  f.read()
+            return seed_totem
+        else:
+            print("PWD PATH::" + os.getcwd())
+            return None
 
     def augment_dataset(self, representative_partition: int, quiet_output = False):
         #Stage 1 - Loading a Partiton, Standardizing and counting labels.
@@ -237,7 +256,7 @@ class FedISIC2019_Dataset():
         for partition_index in range(num_of_partitions):
             partition_data = self.fds.load_partition(partition_id=partition_index, split="train")
             partition_label_counts[partition_index] = self.get_partition_label_count(partition=partition_data, partition_id=partition_index, quiet_output=quiet_output)
-            standardized_dataset = partition_data.map(self.__map_image_to_standard_transformed_image, num_proc=4)
+            standardized_dataset = partition_data.map(self.__map_image_to_standard_transformed_image, num_proc=self.__num_proc)
             standardized_dataset.save_to_disk(f"dataset_proccesed_data/partition{partition_index}")
         
 
@@ -261,6 +280,7 @@ class FedISIC2019_Dataset():
         if(not quiet_output):
             print("Finished augmenting the dataset")
         self._dataset_is_augmented = True
+        self.__save_seed_totem()
         return
 
     def normalize_and_tensorify_batch(self, batch):
@@ -276,7 +296,7 @@ class FedISIC2019_Dataset():
         return batch
 
     def generate_dataloader_for_dataset(self, partition_dataset: Dataset):
-        partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch).with_format('torch')
+        partition_dataset = partition_dataset.with_transform(self.normalize_and_tensorify_batch)
 
         partition_train_test = partition_dataset.train_test_split(test_size=0.2, seed=self.seed)
         partition_train = partition_train_test["train"]
@@ -293,7 +313,7 @@ class FedISIC2019_Dataset():
 
         dataloader_train = DataLoader(
             partition_train,
-            batch_size=32,
+            batch_size=16,
             shuffle=True,
             generator=generator,
             worker_init_fn=SeedWorker("train", train_worker_seeds),
@@ -302,7 +322,7 @@ class FedISIC2019_Dataset():
 
         dataloader_test = DataLoader(
             partition_test,
-            batch_size=32,
+            batch_size=16,
             shuffle=False,
             worker_init_fn=SeedWorker("test", test_worker_seeds),
             num_workers=4
@@ -311,6 +331,12 @@ class FedISIC2019_Dataset():
         return dataloader_train, dataloader_test, train_worker_seeds, test_worker_seeds
     
     def load_partition(self,partition, rep = 0):
+        if self.__read_seed_totem() is not None:
+            augmented_path = f"dataset_proccesed_data/partition{partition}_augmented"
+            if os.path.exists(augmented_path):
+                dataset_partition = datasets.Dataset.load_from_disk(augmented_path)
+                dataloader_train, dataloader_test, _, _ = self.generate_dataloader_for_dataset(dataset_partition)
+                return dataloader_train, dataloader_test
         if self.dataloaders == None:
             self.dataloaders, self.worker_seeds = self.generate_all_dataloaders(rep)
         return self.dataloaders[partition]
@@ -458,6 +484,24 @@ def init_dataset(seed, rep):
 
 def load_partition(partition):
     global dataset
+
+    if dataset is None:
+        seed = 0
+        try:
+            if os.path.exists("seed.json"):
+                with open("seed.json") as f:
+                    seed_data = json.load(f)
+                    seed = seed_data.get("seed", 0)
+        except Exception:
+            pass
+        dataset = FedISIC2019_Dataset(seed)
+
+    augmented_path = f"dataset_proccesed_data/partition{partition}_augmented"
+    if os.path.exists(augmented_path):
+        partition_dataset = datasets.Dataset.load_from_disk(augmented_path)
+        dataloader_train, dataloader_test, _, _ = dataset.generate_dataloader_for_dataset(partition_dataset)
+        return dataloader_train, dataloader_test
+
     return dataset.load_partition(partition)
 
 def load_centralized_dataset():

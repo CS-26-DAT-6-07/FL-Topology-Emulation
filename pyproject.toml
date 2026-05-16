@@ -35,4 +35,4 @@ fraction-evaluate = 1
 local-epochs = 1
 learning-rate = 0.1
 batch-size = 16
-num-clients = 6
+num-partitions = 6
