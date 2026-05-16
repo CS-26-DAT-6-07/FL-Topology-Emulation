@@ -3,8 +3,8 @@
 import torch
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
 from flwr.serverapp import Grid, ServerApp
-#from flwr.serverapp.strategy import FedAvg
-from pytorchexample.custom_strategy import TreeStrategy
+from flwr.serverapp.strategy import FedAvg
+from pytorchexample.custom_strategy import TreeStrategy, Scaffold
 
 from pytorchexample.task import Net, test
 from pytorchexample.models.xception import xception
