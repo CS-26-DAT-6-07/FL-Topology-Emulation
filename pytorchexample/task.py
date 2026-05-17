@@ -137,6 +137,7 @@ def train(net, trainloader, epochs, lr, device):
  
     net.train()
     running_loss = 0.0
+    correct = 0
  
     for _ in range(epochs):
         for batch in trainloader:
@@ -150,9 +151,11 @@ def train(net, trainloader, epochs, lr, device):
             optimizer.step()
  
             running_loss += loss.item()
+            correct += (outputs.argmax(dim=1) == labels).sum().item()
  
     avg_train_loss = running_loss / (epochs * len(trainloader))
-    return avg_train_loss
+    accuracy = correct / len(trainloader.dataset)
+    return avg_train_loss, accuracy
 
 def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
     net.to(device)

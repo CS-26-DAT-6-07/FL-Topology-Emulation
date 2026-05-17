@@ -28,6 +28,7 @@ def train(msg: Message, context: Context):
     batch_size = context.run_config["batch-size"]
     trainloader, _ = load_partition(partition_id)
 
+    """ Part of Scaffold Strategy
     # Load control variate from message content
     global_control_variate = msg.content["global_cv"].to_torch_state_dict()
 
@@ -36,20 +37,24 @@ def train(msg: Message, context: Context):
         local_control_variate = context.state["local_cv"].to_torch_state_dict()
     else:
         local_control_variate = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
-
-    # Call the training function
     """
-    train_loss = train_fn(
+
+    """
+    # Call the training function (for FedAvg/FedProx)
+    train_loss, accuracy = train_fn(
         model,
         trainloader,
         context.run_config["local-epochs"],
         msg.content["config"]["lr"],
         device,
     )
-    
-    feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
     """
-    
+
+    """ Part of the tree with clustering strat
+    feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id) 
+    """
+
+    """
     # Call the scaffold training function
     train_loss, updated_local_model, new_local_cv, cv_diff = scaffold_train(
         model,
@@ -60,10 +65,13 @@ def train(msg: Message, context: Context):
         global_control_variate,
         local_control_variate
     )
+    """
 
+    """ Part of the Scaffold Strategy 
     #save updated local control variate in client state for next round
     context.state["local_cv"] = ArrayRecord(new_local_cv)   
-
+    """
+    """ Part of the Scaffold Strategy
     # Construct and return reply Message
     arrays = ArrayRecord(updated_local_model.state_dict())
     metrics = {
@@ -79,6 +87,9 @@ def train(msg: Message, context: Context):
         "arrays": arrays,
         "control_variate": control_variate_update,
         "metrics": metric_record})
+    """
+    
+
     return Message(content=content, reply_to=msg)
 
 
