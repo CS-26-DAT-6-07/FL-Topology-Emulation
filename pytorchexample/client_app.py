@@ -111,6 +111,9 @@ def train(msg: Message, context: Context):
             "metrics": metric_record})
     
         return Message(content=content, reply_to=msg)
+    else:
+        raise Exception("Did not give proper strategy in toml file")
+    
 
 
 @app.evaluate()
