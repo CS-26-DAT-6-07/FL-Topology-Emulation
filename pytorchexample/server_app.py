@@ -1,7 +1,7 @@
 """pytorchexample: A Flower / PyTorch app."""
 print("---------------- DEBUG: server_app.py is at least working ---------------", flush=True) 
 import torch
-from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord
+from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord, RecordDict
 from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg, FedProx
 from pytorchexample.custom_strategy import TreeStrategy, Scaffold
@@ -27,34 +27,43 @@ def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
 
     # Read run config
+    fraction_train: float = context.run_config["fraction-train"]
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["learning-rate"]
+    strategy_choice: str = context.run_config["strategy-choice"]
     
     # Load global model
     global_model = xception()
     arrays = ArrayRecord(global_model.state_dict())
 
-    #Initialize strategy
-    """
-    strategy = TreeStrategy(
-        edge_groups=EDGE_GROUPS,
-        fraction_evaluate=fraction_evaluate,
-    )
-    """
-    strategy = Scaffold(
-        initial_parameters=arrays,
-        lr=lr,
-        fraction_evaluate=fraction_evaluate,
-    )
-    
-    #strategy = FedAvg(
-        #fraction_train=0.5,#fraction of nodes to involve in a round of training
-    #    fraction_evaluate=fraction_evaluate,
-        #min_available_nodes=100, #minimum connected nodes required before FL starts
-    #    )
+    strategy = None
 
-    # Start strategy, run FedAvg for `num_rounds`
+    #Initialize strategy
+    if strategy_choice == "fedavg":
+        strategy = FedAvg(
+            fraction_train=fraction_train,#fraction of nodes to involve in a round of training
+            fraction_evaluate=fraction_evaluate,
+            min_available_nodes=6, #minimum connected nodes required before FL starts
+        )
+    elif strategy_choice == "fedtree":
+        strategy = TreeStrategy(
+            edge_groups=EDGE_GROUPS,
+            fraction_evaluate=fraction_evaluate,
+        )
+    elif strategy_choice == "scaffold":
+        strategy = Scaffold(
+            initial_parameters=arrays,
+            lr=lr,
+            fraction_evaluate=fraction_evaluate,
+        )
+    else:
+        raise Exception("No Strategy chosen in the toml file / run_config")
+    
+    
+    
+
+    # Start strategy, run for `num_rounds`
     result = strategy.start(
         grid=grid,
         initial_arrays=arrays,
