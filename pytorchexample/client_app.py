@@ -43,70 +43,74 @@ def train(msg: Message, context: Context):
 
         metrics = {
             "train_loss": train_loss,
-            "accuracy": accuracy,
+            "train_acc": accuracy,
         }
         
         model_record = ArrayRecord(model.state_dict())
         metric_record = MetricRecord(metrics)
         content = RecordDict({"arrays": model_record, "metrics": metric_record})
         return Message(content=content, reply_to=msg)
+    elif strategy_choice == "fedtree":
+        # Call the training function (for FedAvg/FedProx)
+        train_loss, accuracy = train_fn(
+            model,
+            trainloader,
+            context.run_config["local-epochs"],
+            msg.content["config"]["lr"],
+            device,
+        )
 
+        feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
+
+        metrics = {
+            "train_loss": train_loss,
+            "train_acc": accuracy,
+            "feature_vector": feature_vector,
+        }
         
+        model_record = ArrayRecord(model.state_dict())
+        metric_record = MetricRecord(metrics)
+        content = RecordDict({"arrays": model_record, "metrics": metric_record})
+        return Message(content=content, reply_to=msg)
+    elif strategy_choice == "scaffold":
+        # Load control variate from message content
+        global_control_variate = msg.content["global_cv"].to_torch_state_dict()
 
-    """ Part of Scaffold Strategy
-    # Load control variate from message content
-    global_control_variate = msg.content["global_cv"].to_torch_state_dict()
-
-    # Initialize/load client control variate
-    if "local_cv" in context.state:
-        local_control_variate = context.state["local_cv"].to_torch_state_dict()
-    else:
-        local_control_variate = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
-    """
-
+        # Initialize/load client control variate
+        if "local_cv" in context.state:
+            local_control_variate = context.state["local_cv"].to_torch_state_dict()
+        else:
+            local_control_variate = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
     
+        # Call the scaffold training function
+        train_loss, accuracy, updated_local_model, new_local_cv, cv_diff = scaffold_train(
+            model,
+            trainloader,
+            context.run_config["local-epochs"],
+            msg.content["config"]["lr"],
+            device,
+            global_control_variate,
+            local_control_variate
+        )
 
-    """ Part of the tree with clustering strat
-    feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id) 
-    """
+        #save updated local control variate in client state for next round
+        context.state["local_cv"] = ArrayRecord(new_local_cv)   
 
-    """
-    # Call the scaffold training function
-    train_loss, updated_local_model, new_local_cv, cv_diff = scaffold_train(
-        model,
-        trainloader,
-        context.run_config["local-epochs"],
-        msg.content["config"]["lr"],
-        device,
-        global_control_variate,
-        local_control_variate
-    )
-    """
-
-    """ Part of the Scaffold Strategy 
-    #save updated local control variate in client state for next round
-    context.state["local_cv"] = ArrayRecord(new_local_cv)   
-    """
-    """ Part of the Scaffold Strategy
-    # Construct and return reply Message
-    arrays = ArrayRecord(updated_local_model.state_dict())
-    metrics = {
-        "train_loss": train_loss,
-        "num-examples": len(trainloader.dataset),
-        #"feature_vector": feature_vector,
-        "partition_id": partition_id,
-    }
-    control_variate_update = ArrayRecord(cv_diff)
-    metric_record = MetricRecord(metrics)
+        # Construct and return reply Message
+        arrays = ArrayRecord(updated_local_model.state_dict())
+        metrics = {
+            "train_loss": train_loss,
+            "train_acc": accuracy,
+        }
+        control_variate_update = ArrayRecord(cv_diff)
+        metric_record = MetricRecord(metrics)
     
-    content = RecordDict({
-        "arrays": arrays,
-        "control_variate": control_variate_update,
-        "metrics": metric_record})
-    """
+        content = RecordDict({
+            "arrays": arrays,
+            "control_variate": control_variate_update,
+            "metrics": metric_record})
     
-
-    return Message(content=content, reply_to=msg)
+        return Message(content=content, reply_to=msg)
 
 
 @app.evaluate()
@@ -136,7 +140,6 @@ def evaluate(msg: Message, context: Context):
     metrics = {
         "eval_loss": eval_loss,
         "eval_acc": eval_acc,
-        "num-examples": len(valloader.dataset),
     }
     metric_record = MetricRecord(metrics)
     content = RecordDict({"metrics": metric_record})

@@ -169,6 +169,7 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
 
     net.train()
     running_loss = 0.
+    correct = 0
     num_steps = 0
  
     for _ in range(epochs):
@@ -195,9 +196,11 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
             optimizer.step()
  
             running_loss += loss.item()
+            correct += (outputs.argmax(dim=1) == labels).sum().item()
             num_steps += 1
  
     avg_train_loss = running_loss / (epochs * len(trainloader))
+    accuracy = correct / len(trainloader.dataset)
 
     #update local model
     updated_model: dict[str, torch.Tensor] = {
@@ -224,7 +227,7 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
             new_local_cv[key] = new_client_cv.cpu()                                                   
             cv_diff[key] = (new_client_cv - local_cv[key].to(device)).cpu()                                        
 
-    return avg_train_loss, net, new_local_cv, cv_diff
+    return avg_train_loss, accuracy, net, new_local_cv, cv_diff
 
 def test(net, testloader, device):
     """Evaluate the model on the test set."""
