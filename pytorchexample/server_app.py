@@ -91,10 +91,18 @@ def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
     test_dataloader = load_centralized_dataset()
 
     # Evaluate the global model on the test set
-    test_loss, test_acc = test(model, test_dataloader, device)
+    test_loss, test_acc, precision, recall, f1, support = test(
+        model, test_dataloader, device, global_eval=True
+    )
 
-    #Should print results correctly
-    #print(f"Round {server_round} - Accuracy: {test_acc}, Loss: {test_loss}")
+    metrics = {
+        "global_accuracy":  test_acc,
+        "global_loss":      test_loss,
+        "global_precision": precision,
+        "global_recall":    recall,
+        "global_f1":        f1,
+    }
+    for i, s in enumerate(support):
+        metrics[f"global_support_class_{i}"] = float(s)
 
-    # Return the evaluation metrics
-    return MetricRecord({"accuracy": test_acc, "loss": test_loss})
+    return MetricRecord(metrics)

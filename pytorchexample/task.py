@@ -12,6 +12,7 @@ from datasets import load_dataset
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import NaturalIdPartitioner
 from torch.utils.data import DataLoader
+from sklearn.metrics import precision_score, recall_score, f1_score
 
 
 class Net(nn.Module):
@@ -229,7 +230,7 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
 
     return avg_train_loss, accuracy, net, new_local_cv, cv_diff
 
-def test(net, testloader, device):
+def test(net, testloader, device, global_eval=False):
     """Evaluate the model on the test set."""
     net.to(device)
     criterion = nn.CrossEntropyLoss().to(device)
@@ -237,6 +238,8 @@ def test(net, testloader, device):
     net.eval()
     correct = 0
     loss = 0.0
+    all_preds = []
+    all_labels = []
 
     with torch.no_grad():
         for batch in testloader:
@@ -245,8 +248,21 @@ def test(net, testloader, device):
 
             outputs = net(images.float())
             loss += criterion(outputs, labels).item()
-            correct += (outputs.argmax(dim=1) == labels).sum().item()
+            
+            predictions = outputs.argmax(dim=1)
+            correct += (predictions == labels).sum().item()
+
+            all_preds.extend(predictions.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
 
     avg_loss = loss / len(testloader)
     accuracy = correct / len(testloader.dataset)
-    return avg_loss, accuracy
+
+    if global_eval:
+        precision = precision_score(all_labels, all_preds, average="weighted", zero_division=0)
+        recall    = recall_score(   all_labels, all_preds, average="weighted", zero_division=0)
+        f1        = f1_score(       all_labels, all_preds, average="weighted", zero_division=0)
+        support   = np.bincount(all_labels).tolist()
+        return avg_loss, accuracy, precision, recall, f1, support
+    else:
+        return avg_loss, accuracy

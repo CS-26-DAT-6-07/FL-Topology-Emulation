@@ -134,6 +134,7 @@ def evaluate(msg: Message, context: Context):
         model,
         valloader,
         device,
+        False,
     )
 
     # Construct and return reply Message
