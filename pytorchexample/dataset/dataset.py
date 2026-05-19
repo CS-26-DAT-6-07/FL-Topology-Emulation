@@ -341,11 +341,11 @@ class FedISIC2019_Dataset():
             augmented_path = f"dataset_proccesed_data/partition{partition}_augmented"
             if os.path.exists(augmented_path):
                 dataset_partition = datasets.Dataset.load_from_disk(augmented_path)
-                dataloader_train, dataloader_test, _, _ = self.generate_dataloader_for_dataset(dataset_partition)
-                return dataloader_train, dataloader_test
+                dataloader_train, dataloader_test, train_seed_list, test_seed_list = self.generate_dataloader_for_dataset(dataset_partition)
+                return dataloader_train, dataloader_test, train_seed_list, test_seed_list
         if self.dataloaders == None:
             self.dataloaders, self.worker_seeds = self.generate_all_dataloaders(rep)
-        return self.dataloaders[partition]
+        return self.dataloaders[partition], self.worker_seeds[partition]
 
     def plot_in_partitions_train_class_distribution(self):
         partitioner = self.fds.partitioners["train"]
@@ -505,8 +505,8 @@ def load_partition(partition, batch_size):
     augmented_path = f"dataset_proccesed_data/partition{partition}_augmented"
     if os.path.exists(augmented_path):
         partition_dataset = datasets.Dataset.load_from_disk(augmented_path)
-        dataloader_train, dataloader_test, _, _ = dataset.generate_dataloader_for_dataset(partition_dataset, batch_size)
-        return dataloader_train, dataloader_test
+        dataloader_train, dataloader_test, train_seed_list, test_seed_list = dataset.generate_dataloader_for_dataset(partition_dataset, batch_size)
+        return dataloader_train, dataloader_test, train_seed_list, test_seed_list
 
     return dataset.load_partition(partition)
 

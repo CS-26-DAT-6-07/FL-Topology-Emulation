@@ -3,6 +3,7 @@
 
 #import torch and models dataset task before flwr stuff, otherwise crash on some systems
 import torch
+import json
 
 from pytorchexample.task import test 
 from pytorchexample.models.xception import xception
@@ -69,9 +70,23 @@ def main(grid: Grid, context: Context) -> None:
         grid=grid,
         initial_arrays=arrays,
         train_config=ConfigRecord({"lr": lr, "strategy_choice": strategy_choice}),
+        evaluate_config=ConfigRecord({"strategy_choice": strategy_choice}),
         num_rounds=num_rounds,
         evaluate_fn=global_evaluate,
     )
+
+    #Saving final metrics to disk
+    print("\nSaving final metrics to disk...")
+    with open(f"experiment_{strategy_choice}/train_metrics_clientapp", "w") as f:
+        metrics = json.dumps(result.train_metrics_clientapp)
+        f.write(metrics)
+    with open(f"experiment_{strategy_choice}/evaluate_metrics_clientapp", "w") as f:
+        metrics = json.dumps(result.evaluate_metrics_clientapp)
+        f.write(metrics)
+    with open(f"experiment_{strategy_choice}/evaluate_metrics_serverapp", "w") as f:
+        metrics = json.dumps(result.evaluate_metrics_serverapp)
+        f.write(metrics)
+
 
     # Save final model to disk
     print("\nSaving final model to disk...")
