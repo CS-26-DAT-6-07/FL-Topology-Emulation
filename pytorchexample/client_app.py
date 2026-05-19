@@ -156,22 +156,30 @@ def extracting_clients_feature_vector(model, trainloader, device, partition_id):
     def hook(module, input, output):
         #print(f"\nClient {partition_id} activation shape:", output.shape)
         #print(f"Client {partition_id} activations:", output)
-        features.append(output.detach().cpu())
 
-    hook_handle = model.fc2.register_forward_hook(hook)
+        #Deatach and squash the spatial dimensions immediately
+        #output is [batch, 2048, H, W]. dim=(2,3) removes H and W.
+        pooled_output = torch.mean(output, dim=(2, 3)).detach().cpu() 
+        features.append(pooled_output)
 
-    with torch.no_grad():
-        for batch in trainloader:
-            images = batch["image"].to(device)
-            model(images)
+        hook_handle = model.bn4.register_forward_hook(hook) #Choose bn4 instead of last hidden layer
 
-    hook_handle.remove()
+        max_batches = 5 
+        with torch.no_grad():
+            for i, batch in enumerate(trainloader):
+                if i >= max_batches:
+                    break
+                images = batch["image"].to(device)
+                model(images)
+                del images #Clears the GPU memory immediately, keep for now
 
-    features = torch.cat(features, dim=0)   #shape: [num_images, 84]
-    client_vector = features.mean(dim=0)    #shape: [84]
+        hook_handle.remove()
 
-    print(f"Client {partition_id} final hidden layer averaged feature vector shape:", client_vector.shape)
-    print(f"Client {partition_id} final hidden layer averaged feature vector:", client_vector)
+        all_features = torch.cat(features, dim=0)  #shape: [Total_Images, 2048]
+        client_vector = all_features.mean(dim=0)   #shape: [2048]
+
+        #print(f"Client {partition_id} final hidden layer averaged feature vector shape:", client_vector.shape)
+        #print(f"Client {partition_id} final hidden layer averaged feature vector:", client_vector)
     
 
-    return client_vector.tolist()
+        return client_vector.tolist()
