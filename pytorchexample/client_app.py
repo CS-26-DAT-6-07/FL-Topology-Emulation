@@ -44,8 +44,11 @@ def train(msg: Message, context: Context):
             device,
         )
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
-            seeds = json.dumps(train_seed_list)
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+            nonproxy_train_seed_list = []
+            for seed in train_seed_list:
+                nonproxy_train_seed_list.append(seed)
+            seeds = json.dumps(nonproxy_train_seed_list)
             f.write(seeds)
 
         metrics = {
@@ -70,8 +73,11 @@ def train(msg: Message, context: Context):
 
         feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
-            seeds = json.dumps(train_seed_list)
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+            nonproxy_train_seed_list = []
+            for seed in train_seed_list:
+                nonproxy_train_seed_list.append(seed)
+            seeds = json.dumps(nonproxy_train_seed_list)
             f.write(seeds)
 
         metrics = {
@@ -108,8 +114,11 @@ def train(msg: Message, context: Context):
             local_control_variate
         )
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
-            seeds = json.dumps(train_seed_list)
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+            nonproxy_train_seed_list = []
+            for seed in train_seed_list:
+                nonproxy_train_seed_list.append(seed)
+            seeds = json.dumps(nonproxy_train_seed_list)
             f.write(seeds)
 
         #save updated local control variate in client state for next round
@@ -164,7 +173,10 @@ def evaluate(msg: Message, context: Context):
     )
 
     with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
-        seeds = json.dumps(val_seed_list)
+        nonproxy_val_seed_list = []
+        for seed in val_seed_list:
+            nonproxy_val_seed_list.append(seed)
+        seeds = json.dumps(nonproxy_val_seed_list)
         f.write(seeds)
 
     # Construct and return reply Message
