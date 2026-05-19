@@ -4,6 +4,7 @@
 #import torch and models dataset task before flwr stuff, otherwise crash on some systems
 import torch
 import json
+import os
 
 from pytorchexample.task import test 
 from pytorchexample.models.xception import xception
@@ -35,6 +36,11 @@ def main(grid: Grid, context: Context) -> None:
     lr: float = context.run_config["learning-rate"]
     strategy_choice: str = context.run_config["strategy-choice"]
     mu_prox: float = context.run_config["mu-prox"] #for fedprox only
+
+    # Create experiment folder
+    folder_path = f"experiment_{strategy_choice}"
+    if not os.path.exists(folder_path):
+        os.mkdir(folder_path)
     
     # Load global model
     global_model = xception()
@@ -76,8 +82,6 @@ def main(grid: Grid, context: Context) -> None:
     else:
         raise Exception("No Strategy chosen in the toml file / run_config")
     
-    
-    
 
     # Start strategy, run for `num_rounds`
     result = strategy.start(
@@ -88,6 +92,7 @@ def main(grid: Grid, context: Context) -> None:
         num_rounds=num_rounds,
         evaluate_fn=global_evaluate,
     )
+
 
     #Saving final metrics to disk
     print("\nSaving final metrics to disk...")
