@@ -32,7 +32,7 @@ def train(msg: Message, context: Context):
     #Load strategy_choice sent from the server side
     strategy_choice = msg.content["config"]["strategy_choice"]
 
-    if strategy_choice == "fedavg":
+    if strategy_choice == "fedavg" or strategy_choice == "fedprox" or strategy_choice == "fedavgcycle":
         # Call the training function (for FedAvg/FedProx)
         train_loss, accuracy = train_fn(
             model,

@@ -12,7 +12,7 @@ from pytorchexample.dataset.dataset import load_centralized_dataset, init_datase
 from flwr.app import ArrayRecord, ConfigRecord, Context, MetricRecord, RecordDict
 from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg, FedProx
-from pytorchexample.custom_strategy import TreeStrategy, Scaffold
+from pytorchexample.custom_strategy import TreeStrategy, Scaffold, FedAvgCyclic
 
 init_dataset(seed=42,rep=0)
 
@@ -34,6 +34,7 @@ def main(grid: Grid, context: Context) -> None:
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["learning-rate"]
     strategy_choice: str = context.run_config["strategy-choice"]
+    mu_prox: float = context.run_config["mu-prox"] #for fedprox only
     
     # Load global model
     global_model = xception()
@@ -58,6 +59,19 @@ def main(grid: Grid, context: Context) -> None:
             initial_parameters=arrays,
             lr=lr,
             fraction_evaluate=fraction_evaluate,
+        )
+    elif strategy_choice == "fedprox":
+        strategy = FedProx(
+            fraction_train=fraction_train,#fraction of nodes to involve in a round of training
+            fraction_evaluate=fraction_evaluate,
+            min_available_nodes=6, #minimum connected nodes required before FL starts
+            mu=mu_prox, #proximal term constant
+         )
+    elif strategy_choice == "fedavgcycle":
+        strategy = FedAvgCyclic(
+            fraction_train=fraction_train,
+            fraction_evaluate=fraction_evaluate,
+            min_available_nodes=6,
         )
     else:
         raise Exception("No Strategy chosen in the toml file / run_config")
