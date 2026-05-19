@@ -38,4 +38,4 @@ local-epochs = 1
 learning-rate = 0.1
 batch-size = 16
 num-partitions = 6
-mu-fedprox = 0.01
+mu-prox = 0.01
