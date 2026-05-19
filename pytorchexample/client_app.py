@@ -162,7 +162,7 @@ def extracting_clients_feature_vector(model, trainloader, device, partition_id):
         pooled_output = torch.mean(output, dim=(2, 3)).detach().cpu() 
         features.append(pooled_output)
 
-        hook_handle = model.bn4.register_forward_hook(hook) #Choose bn4 instead of last hidden layer
+        hook_handle = model.bn4.register_forward_hook(hook) #Choose bn4 instead of last hidden layer as we want general features 
 
         max_batches = 5 
         with torch.no_grad():
@@ -180,6 +180,5 @@ def extracting_clients_feature_vector(model, trainloader, device, partition_id):
 
         #print(f"Client {partition_id} final hidden layer averaged feature vector shape:", client_vector.shape)
         #print(f"Client {partition_id} final hidden layer averaged feature vector:", client_vector)
-    
 
         return client_vector.tolist()
