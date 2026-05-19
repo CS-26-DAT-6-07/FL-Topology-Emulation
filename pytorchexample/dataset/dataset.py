@@ -18,6 +18,11 @@ from flwr_datasets.visualization import plot_label_distributions
 
 #Constants
 SIZE_IMG = 299
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "dataset_proccesed_data")
+
+print(f"BASE_DIR: {BASE_DIR}")
+print(f"DATA_DIR: {DATA_DIR}")
 
 dataset = None
 
@@ -541,13 +546,14 @@ def plot_dataloader_batch(dataloader, num_images=8):
 
 
 if __name__ == "__main__":
-    dataset = FedISIC2019_Dataset(67)
-    dataset.augment_dataset(0)
+    pass
+    #dataset = FedISIC2019_Dataset(67)
+    #dataset.augment_dataset(0)
 
-    augmented_partition = datasets.Dataset.load_from_disk("dataset_proccesed_data/partition0_augmented")
-    dataloader_train_part1, dataloader_test_part1, train_worker_seeds, test_worker_seeds = dataset.generate_dataloader_for_dataset(augmented_partition)
+    #augmented_partition = datasets.Dataset.load_from_disk("dataset_proccesed_data/partition0_augmented")
+    #dataloader_train_part1, dataloader_test_part1, train_worker_seeds, test_worker_seeds = dataset.generate_dataloader_for_dataset(augmented_partition)
 
 
-    plot_dataloader_batch(dataloader_train_part1)
-    print({"DatasetObjSeed": dataset.seed, "train": list(train_worker_seeds), "test": list(test_worker_seeds)})
-    dataset.plot_in_partitions_augmented_train_class_distribution(0)
+    #plot_dataloader_batch(dataloader_train_part1)
+    #print({"DatasetObjSeed": dataset.seed, "train": list(train_worker_seeds), "test": list(test_worker_seeds)})
+    #dataset.plot_in_partitions_augmented_train_class_distribution(0)
