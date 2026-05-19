@@ -30,6 +30,9 @@ def train(msg: Message, context: Context):
 
     if partition_id <= 6:
         trainloader, _, train_seed_list, _ = load_partition(partition_id, batch_size)
+    else:
+        print(f"Client Nr. {partition_id} EXITING!!!")
+        exit(555)
 
     #Load strategy_choice sent from the server side
     strategy_choice = msg.content["config"]["strategy_choice"]
@@ -71,6 +74,7 @@ def train(msg: Message, context: Context):
             device,
         )
 
+        #BUG: Returns None!!!!
         feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
 
         with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
@@ -85,7 +89,7 @@ def train(msg: Message, context: Context):
             "train_acc": accuracy,
             "feature_vector": feature_vector,
             "num-examples": len(trainloader.dataset),
-            "partition_id": int(context.node_config["partition-id"]),
+            "partition_id": context.node_config["partition-id"],
         }
         
         model_record = ArrayRecord(model.state_dict())
