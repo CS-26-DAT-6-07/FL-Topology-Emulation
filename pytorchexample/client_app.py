@@ -1,7 +1,8 @@
 """pytorchexample: A Flower / PyTorch app."""
 #print("---------------- DEBUG: client_app.py is working ---------------", flush=True) 
+from pyarrow import json
 import torch
-from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
+from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict, ConfigRecord
 from flwr.clientapp import ClientApp
 
 from pytorchexample.task import test as test_fn
@@ -26,12 +27,12 @@ def train(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    trainloader, _ = load_partition(partition_id, batch_size)
+    trainloader, _, train_seed_list, _ = load_partition(partition_id, batch_size)
 
     #Load strategy_choice sent from the server side
     strategy_choice = msg.content["config"]["strategy_choice"]
 
-    if strategy_choice == "fedavg":
+    if strategy_choice == "fedavg" or strategy_choice == "fedprox" or strategy_choice == "fedavgcycle":
         # Call the training function (for FedAvg/FedProx)
         train_loss, accuracy = train_fn(
             model,
@@ -40,6 +41,10 @@ def train(msg: Message, context: Context):
             msg.content["config"]["lr"],
             device,
         )
+
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
+            seeds = json.dumps(train_seed_list)
+            f.write(seeds)
 
         metrics = {
             "train_loss": train_loss,
@@ -62,6 +67,10 @@ def train(msg: Message, context: Context):
         )
 
         feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
+
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
+            seeds = json.dumps(train_seed_list)
+            f.write(seeds)
 
         metrics = {
             "train_loss": train_loss,
@@ -96,6 +105,10 @@ def train(msg: Message, context: Context):
             global_control_variate,
             local_control_variate
         )
+
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
+            seeds = json.dumps(train_seed_list)
+            f.write(seeds)
 
         #save updated local control variate in client state for next round
         context.state["local_cv"] = ArrayRecord(new_local_cv)   
@@ -135,7 +148,10 @@ def evaluate(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    _, valloader = load_partition(partition_id, batch_size)
+    _, valloader, _, val_seed_list = load_partition(partition_id, batch_size)
+
+    #Load strategy_choice sent from the server side (needed for experiment folder naming)
+    strategy_choice = msg.content["config"]["strategy_choice"]
 
     # Call the evaluation function
     eval_loss, eval_acc = test_fn(
@@ -144,6 +160,10 @@ def evaluate(msg: Message, context: Context):
         device,
         False,
     )
+
+    with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+        seeds = json.dumps(val_seed_list)
+        f.write(seeds)
 
     # Construct and return reply Message
     metrics = {
