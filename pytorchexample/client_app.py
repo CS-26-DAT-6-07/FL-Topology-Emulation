@@ -1,6 +1,6 @@
 """pytorchexample: A Flower / PyTorch app."""
 #print("---------------- DEBUG: client_app.py is working ---------------", flush=True) 
-from pyarrow import json
+import json
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict, ConfigRecord
 from flwr.clientapp import ClientApp
