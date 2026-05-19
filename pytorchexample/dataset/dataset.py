@@ -23,6 +23,7 @@ DATA_DIR = os.path.join(BASE_DIR, "dataset_proccesed_data")
 
 print(f"BASE_DIR: {BASE_DIR}")
 print(f"DATA_DIR: {DATA_DIR}")
+print(f"Current working directory: {os.getcwd()}")
 
 dataset = None
 
