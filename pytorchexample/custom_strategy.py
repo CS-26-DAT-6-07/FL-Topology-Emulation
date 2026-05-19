@@ -104,7 +104,10 @@ class TreeStrategy(FedAvg):
         #STEP 4: GROUP REPLIES BY EDGE SERVER
         edge_replies = {0: [], 1: []}
         for reply in valid_replies:
-            partid = int(reply.content["metrics"]["partition_id"])
+            # Use .get() with a safe default fallback instead of a hard lookup
+            metrics = reply.content.get("metrics", {})
+            partid = int(metrics.get("partition_id", -1)) 
+            
             for edge_id, group in self.edge_groups.items():
                 if partid in group:
                     edge_replies[edge_id].append(reply)

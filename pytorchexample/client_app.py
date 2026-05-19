@@ -1,5 +1,5 @@
 """pytorchexample: A Flower / PyTorch app."""
-print("---------------- DEBUG: client_app.py is working ---------------", flush=True) 
+#print("---------------- DEBUG: client_app.py is working ---------------", flush=True) 
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
@@ -44,6 +44,7 @@ def train(msg: Message, context: Context):
         metrics = {
             "train_loss": train_loss,
             "train_acc": accuracy,
+            "num-examples": len(trainloader.dataset),
         }
         
         model_record = ArrayRecord(model.state_dict())
@@ -66,12 +67,15 @@ def train(msg: Message, context: Context):
             "train_loss": train_loss,
             "train_acc": accuracy,
             "feature_vector": feature_vector,
+            "num-examples": len(trainloader.dataset),
+            "partition_id": int(context.node_config["partition-id"]),
         }
         
         model_record = ArrayRecord(model.state_dict())
         metric_record = MetricRecord(metrics)
         content = RecordDict({"arrays": model_record, "metrics": metric_record})
         return Message(content=content, reply_to=msg)
+    
     elif strategy_choice == "scaffold":
         # Load control variate from message content
         global_control_variate = msg.content["global_cv"].to_torch_state_dict()
@@ -101,6 +105,7 @@ def train(msg: Message, context: Context):
         metrics = {
             "train_loss": train_loss,
             "train_acc": accuracy,
+            "num-examples": len(trainloader.dataset),
         }
         control_variate_update = ArrayRecord(cv_diff)
         metric_record = MetricRecord(metrics)
@@ -144,6 +149,7 @@ def evaluate(msg: Message, context: Context):
     metrics = {
         "eval_loss": eval_loss,
         "eval_acc": eval_acc,
+        "num-examples": len(valloader.dataset),
     }
     metric_record = MetricRecord(metrics)
     content = RecordDict({"metrics": metric_record})
