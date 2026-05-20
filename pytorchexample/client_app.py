@@ -135,6 +135,8 @@ def train(msg: Message, context: Context):
             "train_acc": accuracy,
             "num-examples": len(trainloader.dataset),
         }
+        
+        #BUG: You cant have more than one ArrayRecord in your reply
         control_variate_update = ArrayRecord(cv_diff)
         metric_record = MetricRecord(metrics)
     

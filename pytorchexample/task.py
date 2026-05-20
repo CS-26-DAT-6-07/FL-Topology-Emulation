@@ -179,7 +179,7 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
             labels = batch["label"].to(device)
  
             optimizer.zero_grad()
-            outputs = net(images)
+            outputs = net(images.float())
             loss = criterion(outputs, labels)
             loss.backward()
 
