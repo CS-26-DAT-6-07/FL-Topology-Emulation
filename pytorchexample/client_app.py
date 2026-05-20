@@ -77,7 +77,7 @@ def train(msg: Message, context: Context):
         #BUG: Returns None!!!!
         feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
             nonproxy_train_seed_list = []
             for seed in train_seed_list:
                 nonproxy_train_seed_list.append(seed)
@@ -118,7 +118,7 @@ def train(msg: Message, context: Context):
             local_control_variate
         )
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
             nonproxy_train_seed_list = []
             for seed in train_seed_list:
                 nonproxy_train_seed_list.append(seed)
