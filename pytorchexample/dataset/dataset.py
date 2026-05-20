@@ -345,7 +345,10 @@ class FedISIC2019_Dataset():
                 return dataloader_train, dataloader_test, train_seed_list, test_seed_list
         if self.dataloaders == None:
             self.dataloaders, self.worker_seeds = self.generate_all_dataloaders(rep)
-        return self.dataloaders[partition], self.worker_seeds[partition]
+        # FIX: Unpack the tuples so it explicitly returns 4 items
+        train_loader, test_loader = self.dataloaders[partition]
+        train_seeds, test_seeds = self.worker_seeds[partition]
+        return train_loader, test_loader, train_seeds, test_seeds
 
     def plot_in_partitions_train_class_distribution(self):
         partitioner = self.fds.partitioners["train"]

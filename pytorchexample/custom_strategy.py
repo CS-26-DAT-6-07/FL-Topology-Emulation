@@ -47,28 +47,25 @@ class TreeStrategy(FedAvg):
         replies: Iterable[Message]
     ) -> Tuple[Optional[ArrayRecord], Optional[MetricRecord]]:
         
-        #print("------------CUSTOM aggregate_train CALLED--------------", flush=True)
-        
-        #Convert to list so we can iterate multiple times
         replies_list = list(replies)
         if not replies_list:
             return None, None
 
-        #STEP 1: EXTRACT FEATURE VECTORS
+        # STEP 1: EXTRACT FEATURE VECTORS
         client_ids = []
         feature_vectors = []
-        valid_replies = [] #Keep track of replies that didn't crash
+        valid_replies = [] 
 
         for reply in replies_list:
-
-            #Check if the message has content (it won't if the client crashed)
             if not reply.has_content():
                 print(f"Empty message received in round {server_round}. Skipping client.")
                 continue
 
-            metrics = reply.content.get("metrics", {})
-            client_ids.append(int(metrics.get("partition_id", 0)))
-            feature_vectors.append(metrics.get("feature_vector", []))
+            # --- FLOWER 1.29 FIX: Access the metrics namespace strictly ---
+            metric_record = reply.content.metrics["metrics"]
+            
+            client_ids.append(int(metric_record["partition_id"]))
+            feature_vectors.append(metric_record["feature_vector"])
             valid_replies.append(reply)
 
         if not valid_replies:
@@ -87,7 +84,6 @@ class TreeStrategy(FedAvg):
         
         self.edge_groups = new_edge_groups
 
-        #Only plot if we have more than 1 client
         if len(X) > 1:
             pca = PCA(n_components=2)
             X_pca = pca.fit_transform(X)
@@ -99,33 +95,32 @@ class TreeStrategy(FedAvg):
             plt.savefig(f"round_{server_round}_clusters.png")
             plt.close()
 
-        print(f"\nNew clustered edge groups: {self.edge_groups}") #Print the edge groups every round
+        print(f"\nNew clustered edge groups: {self.edge_groups}")
 
-        #STEP 4: GROUP REPLIES BY EDGE SERVER
+        # STEP 4: GROUP REPLIES BY EDGE SERVER
         edge_replies = {0: [], 1: []}
         for reply in valid_replies:
-            # Use .get() with a safe default fallback instead of a hard lookup
-            metrics = reply.content.get("metrics", {})
-            partid = int(metrics.get("partition_id", -1)) 
+           
+            metric_record = reply.content.metrics["metrics"]
+            partid = int(metric_record["partition_id"]) 
             
             for edge_id, group in self.edge_groups.items():
                 if partid in group:
                     edge_replies[edge_id].append(reply)
                     break
 
-        #STEP 5 & 6: AGGREGATE PER EDGE AND THEN GLOBALLY
+        # STEP 5 & 6: AGGREGATE PER EDGE AND THEN GLOBALLY
         edge_aggregates = []
         for edge_id, group_messages in edge_replies.items():
             if not group_messages:
                 continue
             
-            # 1. Calculate the total examples for THIS edge group manually
-            group_examples = sum(int(msg.content["metrics"].get("num-examples", 0)) for msg in group_messages)
+            # --- FLOWER 1.29 FIX: Access namespace ---
+            group_examples = sum(int(msg.content.metrics["metrics"]["num-examples"]) for msg in group_messages)
             
             edge_arrays, _ = super().aggregate_train(server_round, group_messages)
             
             if edge_arrays is not None:
-                # 2. Store the arrays and the manual count
                 edge_aggregates.append((edge_arrays, group_examples))
 
         if not edge_aggregates:
