@@ -30,12 +30,12 @@ serverapp = "pytorchexample.server_app:app"
 clientapp = "pytorchexample.client_app:app"
 
 [tool.flwr.app.config]
-strategy-choice = "fedtree"   
-num-server-rounds = 10
+strategy-choice = "fedavg"   
+num-server-rounds = 150
 fraction-train = 1
 fraction-evaluate = 1
 local-epochs = 1
-learning-rate = 0.1
-batch-size = 16
+learning-rate = 0.03
+batch-size = 32
 num-partitions = 6
 mu-prox = 0.01
