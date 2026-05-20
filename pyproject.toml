@@ -30,7 +30,7 @@ serverapp = "pytorchexample.server_app:app"
 clientapp = "pytorchexample.client_app:app"
 
 [tool.flwr.app.config]
-strategy-choice = "fedavg"   
+strategy-choice = "fedavgcycle"   
 num-server-rounds = 150
 fraction-train = 1
 fraction-evaluate = 1
