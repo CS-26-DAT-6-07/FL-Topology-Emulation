@@ -47,7 +47,7 @@ def train(msg: Message, context: Context):
             device,
         )
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_eval_seeds.json", "w") as f:
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
             nonproxy_train_seed_list = []
             for seed in train_seed_list:
                 nonproxy_train_seed_list.append(seed)
