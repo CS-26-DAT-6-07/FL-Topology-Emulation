@@ -71,7 +71,7 @@ def main(grid: Grid, context: Context) -> None:
             fraction_train=fraction_train,#fraction of nodes to involve in a round of training
             fraction_evaluate=fraction_evaluate,
             min_available_nodes=6, #minimum connected nodes required before FL starts
-            mu=mu_prox, #proximal term constant
+            proximal_mu=mu_prox, #proximal term constant
          )
     elif strategy_choice == "fedavgcycle":
         strategy = FedAvgCyclic(
