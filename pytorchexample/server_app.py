@@ -15,7 +15,8 @@ from flwr.serverapp import Grid, ServerApp
 from flwr.serverapp.strategy import FedAvg, FedProx
 from pytorchexample.custom_strategy import TreeStrategy, Scaffold, FedAvgCyclic
 
-init_dataset(seed=42,rep=0)
+SEED = 42
+init_dataset(SEED,rep=0)
 
 # Create ServerApp
 app = ServerApp()
@@ -54,6 +55,7 @@ def main(grid: Grid, context: Context) -> None:
             fraction_train=fraction_train,#fraction of nodes to involve in a round of training
             fraction_evaluate=fraction_evaluate,
             min_available_nodes=6, #minimum connected nodes required before FL starts
+            seed = SEED
         )
     elif strategy_choice == "fedtree":
         strategy = TreeStrategy(

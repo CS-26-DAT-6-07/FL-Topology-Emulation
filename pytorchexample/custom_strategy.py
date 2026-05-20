@@ -226,11 +226,10 @@ class Scaffold(FedAvg):
 
 
 class FedAvgCyclic(FedAvg):
-    def __init__(self, fraction_train = 1, fraction_evaluate = 1, min_train_nodes = 2, min_evaluate_nodes = 2, min_available_nodes = 2, weighted_by_key = "num-examples", arrayrecord_key = "arrays", configrecord_key = "config", train_metrics_aggr_fn = None, evaluate_metrics_aggr_fn = None):
+    def __init__(self, fraction_train = 1, fraction_evaluate = 1, min_train_nodes = 2, min_evaluate_nodes = 2, min_available_nodes = 2, weighted_by_key = "num-examples", arrayrecord_key = "arrays", configrecord_key = "config", train_metrics_aggr_fn = None, evaluate_metrics_aggr_fn = None, seed = 0):
         super().__init__(fraction_train, fraction_evaluate, min_train_nodes, min_evaluate_nodes, min_available_nodes, weighted_by_key, arrayrecord_key, configrecord_key, train_metrics_aggr_fn, evaluate_metrics_aggr_fn)
+        np.random.seed(seed)
 
-
-        self.micro_round = 0
         self.thread_to_local_models = {}
         self.thread_targets = {}
         self.thread_to_client = {}
@@ -244,7 +243,7 @@ class FedAvgCyclic(FedAvg):
         self.num_clients = len(all_clients)
         if(self.num_clients == None):
             self.num_clients = len(sorted_cids)
-        num_of_threads = math.floor(self.fraction_fit*self.num_clients)
+        num_of_threads = max(math.floor(self.fraction_fit*self.num_clients),1)
         if num_of_threads == 0:
             raise ValueError("fraction_fit must result in a non zero number of clients")
 
@@ -279,8 +278,6 @@ class FedAvgCyclic(FedAvg):
             if tid != None:
                 self.thread_to_local_models[tid] = fit_res.parameters
                 self.thread_to_client[tid] += 1
-
-        self.micro_round += 1
         
         if server_round % self.num_clients != 0 :
             return None, {}
