@@ -6,6 +6,8 @@ __pycache__/
 dataset/dataset_proccesed_data/*
 
 dataset_proccesed_data/
+FederatedAlgorithms/
+experiment_*/
 
 
 seed.json
