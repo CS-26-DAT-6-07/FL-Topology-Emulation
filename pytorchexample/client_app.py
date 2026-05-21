@@ -78,25 +78,6 @@ def train(msg: Message, context: Context):
         content.metrics["metrics"] = MetricRecord(metrics)
         return Message(content=content, reply_to=msg)
     
-
-    if strategy_choice == "fedavg" or strategy_choice == "fedprox" or strategy_choice == "fedavgcycle":
-        # Call the training function (for FedAvg/FedProx)
-        train_loss, accuracy = train_fn(
-            model,
-            trainloader,
-            context.run_config["local-epochs"],
-            msg.content["config"]["lr"],
-            device,
-            "partition_id": partition_id,
-            "feature_vector": feature_vector
-        )
-        
-        # Ensure you are nesting it correctly
-        content = RecordDict()
-        content.arrays["arrays"] = ArrayRecord(model.state_dict())
-        content.metrics["metrics"] = MetricRecord(metrics) # Key matches Strategy access
-        return Message(content=content, reply_to=msg)
-    
     elif strategy_choice == "scaffold":
         global_control_variate = msg.content["global_cv"].to_torch_state_dict()
 
