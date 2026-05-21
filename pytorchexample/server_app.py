@@ -42,7 +42,9 @@ def main(grid: Grid, context: Context) -> None:
     folder_path = f"experiment_{strategy_choice}"
     if not os.path.exists(folder_path):
         os.mkdir(folder_path)
-    
+        if strategy_choice == "fedtree":
+            os.mkdir(os.path.join(folder_path, "cluster_images"))
+
     # Load global model
     global_model = xception()
     arrays = ArrayRecord(global_model.state_dict())
@@ -55,7 +57,6 @@ def main(grid: Grid, context: Context) -> None:
             fraction_train=fraction_train,#fraction of nodes to involve in a round of training
             fraction_evaluate=fraction_evaluate,
             min_available_nodes=6, #minimum connected nodes required before FL starts
-
         )
     elif strategy_choice == "fedtree":
         strategy = TreeStrategy(
