@@ -79,7 +79,7 @@ def train(msg: Message, context: Context):
             "partition_id": partition_id,
             "feature_vector": feature_vector
         }
-        
+
         content = RecordDict()
         content["arrays"] = ArrayRecord(model.state_dict())
         content["metrics"] = MetricRecord(metrics)
@@ -158,44 +158,3 @@ def evaluate(msg: Message, context: Context):
     metric_record = MetricRecord(metrics)
     content = RecordDict({"metrics": metric_record})
     return Message(content=content, reply_to=msg)
-
-    """
-    def hook(module, input, output): 
-        tensor = output[0] if isinstance(output, tuple) else output
-        
-        #Apply ReLU to get post-activation features
-        tensor = torch.nn.functional.relu(tensor)
-        
-        # Global Average Pooling
-        pooled_output = torch.mean(tensor, dim=(2, 3)).detach().cpu()
-        feature_container["data"].append(pooled_output)
-
-    print(f"DEBUG: Registering hook on model.bn4 for partition {partition_id}")
-    hook_handle = model.bn4.register_forward_hook(hook)
-
-    max_batches = 5 
-    batches_processed = 0
-    
-    with torch.no_grad():
-        for i, batch in enumerate(trainloader):
-            if i >= max_batches:
-                break
-            images = batch["image"].to(device).float()
-            model(images) 
-            batches_processed += 1
-            del images 
-
-    hook_handle.remove()
-
-    if not feature_container["data"]:
-        print(f"WARNING: feature_container is empty for partition {partition_id}!")
-        return [0.0] * 2048 
-
-    all_features = torch.cat(feature_container["data"], dim=0)
-    client_vector = all_features.mean(dim=0)
-
-    print(f"Client {partition_id} final hidden layer averaged feature vector shape:", client_vector.shape)
-    print(f"Client {partition_id} final hidden layer averaged feature vector:", client_vector)
-    
-    return [float(x) for x in client_vector.tolist()]
-    """
