@@ -48,26 +48,53 @@ def train(msg: Message, context: Context):
         return Message(content=content, reply_to=msg)
 
     elif strategy_choice == "fedtree":
-        # Extract features ONCE on the global model weights
-        feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
+        #feature_vector = extracting_clients_feature_vector(model, trainloader, device, partition_id)
+        feature_container = {"data": []}
         
+        def hook(module, input, output):
+            if len(feature_container["data"]) < 5:
+                tensor = torch.nn.functional.relu(output)
+                pooled = torch.mean(tensor, dim=(2, 3)).detach().cpu()
+                feature_container["data"].append(pooled)
+
+        hook_handle = model.bn4.register_forward_hook(hook)
+
         # Train locally
         train_loss, accuracy = train_fn(model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device)
 
-        # FIX 1: Removed the second extraction here!
+        hook_handle.remove()
 
-        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
-            f.write(json.dumps([seed for seed in train_seed_list]))
+        feature_vector = [float(x) for x in torch.cat(feature_container["data"]).mean(dim=0).tolist()] if feature_container["data"] else [0.0]*2048
 
         metrics = {
-            "train_loss": train_loss,
-            "train_acc": accuracy,
-            "feature_vector": feature_vector, 
+            "train_loss": train_loss, 
+            "train_acc": accuracy, 
             "num-examples": len(trainloader.dataset),
-            "partition_id": context.node_config["partition-id"],
+            "partition_id": partition_id,
+            "feature_vector": feature_vector
         }
+        content = RecordDict()
+        content.arrays["arrays"] = ArrayRecord(model.state_dict())
+        content.metrics["metrics"] = MetricRecord(metrics)
+        return Message(content=content, reply_to=msg)
+    
+
+    if strategy_choice == "fedavg" or strategy_choice == "fedprox" or strategy_choice == "fedavgcycle":
+        # Call the training function (for FedAvg/FedProx)
+        train_loss, accuracy = train_fn(
+            model,
+            trainloader,
+            context.run_config["local-epochs"],
+            msg.content["config"]["lr"],
+            device,
+            "partition_id": partition_id,
+            "feature_vector": feature_vector
+        )
         
-        content = RecordDict({"arrays": ArrayRecord(model.state_dict()), "metrics": MetricRecord(metrics)})
+        # Ensure you are nesting it correctly
+        content = RecordDict()
+        content.arrays["arrays"] = ArrayRecord(model.state_dict())
+        content.metrics["metrics"] = MetricRecord(metrics) # Key matches Strategy access
         return Message(content=content, reply_to=msg)
     
     elif strategy_choice == "scaffold":
@@ -144,15 +171,7 @@ def evaluate(msg: Message, context: Context):
     content = RecordDict({"metrics": metric_record})
     return Message(content=content, reply_to=msg)
 
-def extracting_clients_feature_vector(model, trainloader, device, partition_id):
     """
-    Extracts features safely from the model using a forward hook.
-    """
-    # CRITICAL: Must be eval() to prevent size-1 batch crashes
-    model.eval() 
-    
-    feature_container = {"data": []}
-
     def hook(module, input, output): 
         tensor = output[0] if isinstance(output, tuple) else output
         
@@ -191,3 +210,4 @@ def extracting_clients_feature_vector(model, trainloader, device, partition_id):
     print(f"Client {partition_id} final hidden layer averaged feature vector:", client_vector)
     
     return [float(x) for x in client_vector.tolist()]
+    """
