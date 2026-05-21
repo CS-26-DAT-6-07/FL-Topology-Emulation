@@ -68,6 +68,11 @@ class TreeStrategy(FedAvg):
             feature_vectors.append(metric_record["feature_vector"])
             valid_replies.append(reply)
 
+            #.---Print the round, feature vector len and the client its coming from---
+            pid = metric_record["partition_id"]
+            fv_len = len(metric_record["feature_vector"])
+            print(f"[DEBUG - Server] Round {server_round}: Received feature vector of length {fv_len} from Client {pid}", flush=True)
+
         if not valid_replies:
             return None, None
 

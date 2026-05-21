@@ -68,7 +68,7 @@ def train(msg: Message, context: Context):
             f.write(json.dumps([seed for seed in train_seed_list]))
 
         feature_vector = [float(x) for x in torch.cat(feature_container["data"]).mean(dim=0).tolist()] if feature_container["data"] else [0.0]*2048
-
+        print(f"[DEBUG - Client {partition_id}] Sample values: {feature_vector[:3]}\n", flush=True) #If not 0 then it actually contains the bn4 feature vector
         metrics = {
             "train_loss": train_loss, 
             "train_acc": accuracy, 

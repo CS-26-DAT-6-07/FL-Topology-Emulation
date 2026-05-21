@@ -55,7 +55,6 @@ def main(grid: Grid, context: Context) -> None:
             fraction_train=fraction_train,#fraction of nodes to involve in a round of training
             fraction_evaluate=fraction_evaluate,
             min_available_nodes=6, #minimum connected nodes required before FL starts
-            seed = SEED
         )
     elif strategy_choice == "fedtree":
         strategy = TreeStrategy(
