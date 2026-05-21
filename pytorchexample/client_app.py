@@ -64,6 +64,9 @@ def train(msg: Message, context: Context):
 
         hook_handle.remove()
 
+        with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
+            f.write(json.dumps([seed for seed in train_seed_list]))
+
         feature_vector = [float(x) for x in torch.cat(feature_container["data"]).mean(dim=0).tolist()] if feature_container["data"] else [0.0]*2048
 
         metrics = {
