@@ -97,7 +97,7 @@ class TreeStrategy(FedAvg):
             for i, cid in enumerate(client_ids):
                 plt.annotate(f"C{cid}", (X_pca[i, 0], X_pca[i, 1]))
             plt.title(f"Round {server_round} Clusters")
-            plt.savefig(f"round_{server_round}_clusters.png")
+            plt.savefig(f"experiment_fedtree/cluster_images/round_{server_round}_clusters.png")
             plt.close()
 
         print(f"\nNew clustered edge groups: {self.edge_groups}")
