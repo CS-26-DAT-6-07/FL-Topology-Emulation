@@ -79,9 +79,10 @@ def train(msg: Message, context: Context):
             "partition_id": partition_id,
             "feature_vector": feature_vector
         }
+        
         content = RecordDict()
-        content.arrays["arrays"] = ArrayRecord(model.state_dict())
-        content.metrics["metrics"] = MetricRecord(metrics)
+        content["arrays"] = ArrayRecord(model.state_dict())
+        content["metrics"] = MetricRecord(metrics)
         return Message(content=content, reply_to=msg)
     
     elif strategy_choice == "scaffold":
