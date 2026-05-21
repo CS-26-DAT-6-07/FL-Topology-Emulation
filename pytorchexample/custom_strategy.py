@@ -234,19 +234,14 @@ class FedAvgCyclic(FedAvg):
         self.thread_targets = {}
         self.thread_to_client = {}
 
-    
-
-
     def configure_fit(self, server_round, parameters, client_manager):
         all_clients = client_manager.all()
         sorted_cids = sorted(all_clients.keys())
-        self.num_clients = len(all_clients)
+        print(sorted_cids)
+        #self.num_clients = len(all_clients)
         if(self.num_clients == None):
             self.num_clients = len(sorted_cids)
         num_of_threads = max(math.floor(self.fraction_fit*self.num_clients),1)
-        if num_of_threads == 0:
-            raise ValueError("fraction_fit must result in a non zero number of clients")
-
         config = {}
         if self.on_fit_config_fn is not None:
             config = self.on_fit_config_fn(server_round)
@@ -261,9 +256,10 @@ class FedAvgCyclic(FedAvg):
         
 
         for thread_id, target_cid in self.thread_to_client.items():
-            target_cid = target_cid % self.num_clients
+            target_cid = str(int(target_cid) % self.num_clients)
             cid = sorted_cids[target_cid]
             client_proxy = all_clients[cid]
+            print(f"thread {thread_id} -> client {target_cid}")
 
             fit_ins = FitIns(self.thread_to_local_models[thread_id],config)
             ins.append((client_proxy, fit_ins))
@@ -277,7 +273,7 @@ class FedAvgCyclic(FedAvg):
             tid = value_to_key(cid, self.thread_to_client)
             if tid != None:
                 self.thread_to_local_models[tid] = fit_res.parameters
-                self.thread_to_client[tid] += 1
+                self.thread_to_client[tid] = str(int(self.thread_to_client) + 1) 
         
         if server_round % self.num_clients != 0 :
             return None, {}

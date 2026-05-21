@@ -79,6 +79,7 @@ def main(grid: Grid, context: Context) -> None:
             fraction_train=fraction_train,
             fraction_evaluate=fraction_evaluate,
             min_available_nodes=6,
+            seed = SEED
         )
     else:
         raise Exception("No Strategy chosen in the toml file / run_config")

@@ -487,6 +487,10 @@ def init_dataset(seed, rep):
     dataset = FedISIC2019_Dataset(seed)  
     dataset.load_partition(0, rep=rep)
 
+def no_augment_init_dataset():
+    global dataset
+    dataset = FedISIC2019_Dataset(0)
+
 
 def load_partition(partition, batch_size):
     global dataset
