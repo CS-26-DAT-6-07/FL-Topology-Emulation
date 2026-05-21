@@ -62,7 +62,7 @@ class TreeStrategy(FedAvg):
                 continue
 
             # --- FLOWER 1.29 FIX: Access the metrics namespace strictly ---
-            metric_record = reply.content.metrics["metrics"]
+            metric_record = reply.content["metrics"]
             
             client_ids.append(int(metric_record["partition_id"]))
             feature_vectors.append(metric_record["feature_vector"])
@@ -106,7 +106,7 @@ class TreeStrategy(FedAvg):
         edge_replies = {0: [], 1: []}
         for reply in valid_replies:
            
-            metric_record = reply.content.metrics["metrics"]
+            metric_record = reply.content["metrics"]
             partid = int(metric_record["partition_id"]) 
             
             for edge_id, group in self.edge_groups.items():
@@ -121,7 +121,7 @@ class TreeStrategy(FedAvg):
                 continue
             
             # --- FLOWER 1.29 FIX: Access namespace ---
-            group_examples = sum(int(msg.content.metrics["metrics"]["num-examples"]) for msg in group_messages)
+            group_examples = sum(int(msg.content["metrics"]["num-examples"]) for msg in group_messages)
             
             edge_arrays, _ = super().aggregate_train(server_round, group_messages)
             
