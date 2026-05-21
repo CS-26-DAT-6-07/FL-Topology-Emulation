@@ -53,9 +53,12 @@ def train(msg: Message, context: Context):
         
         def hook(module, input, output):
             if len(feature_container["data"]) < 5:
-                tensor = torch.nn.functional.relu(output)
-                pooled = torch.mean(tensor, dim=(2, 3)).detach().cpu()
-                feature_container["data"].append(pooled)
+                with torch.no_grad():
+                    tensor = torch.nn.functional.relu(output)
+                    pooled = torch.mean(tensor, dim=(2, 3)).detach().cpu().float()
+                    feature_container["data"].append(pooled)
+                del tensor
+                del pooled
 
         hook_handle = model.bn4.register_forward_hook(hook)
 
