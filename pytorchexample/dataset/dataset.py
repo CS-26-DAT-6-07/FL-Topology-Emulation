@@ -455,6 +455,10 @@ def init_dataset(seed, rep):
     dataset = FedISIC2019_Dataset(seed)  
     dataset.load_partition(0, rep=rep)
 
+def no_augment_init_dataset():
+    global dataset
+    dataset = FedISIC2019_Dataset(0)
+
 
 def load_partition(partition):
     global dataset
@@ -466,7 +470,7 @@ def load_centralized_dataset():
         temp = dataset.fds.load_split(split = "test").map(dataset.wrapper_mitosti)
         dataset.global_dataloader = DataLoader(
                 dataset=temp.with_transform(dataset.normalize_and_tensorify_batch),#dataset.fds.load_split(split = "test").with_transform(dataset.normalize_and_tensorify_batch),
-                batch_size=32,
+                batch_size=16,
                 shuffle=False
             )
 

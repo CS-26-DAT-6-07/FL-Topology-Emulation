@@ -122,6 +122,7 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int):
     return trainloader, testloader
 
 
+
 def load_centralized_dataset(batch_size: int = 128):
     """Load the full centralized test set for server-side evaluation."""
     test_dataset = load_dataset("flwrlabs/fed-isic2019", split="test")
