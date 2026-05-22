@@ -43,8 +43,6 @@ for batch in dataloader:
 
 #confusion_matrix = sklearn.metrics.confusion_matrix(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred')
 
-sklearn.metrics.ConfusionMatrixDisplay.from_predictions(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred')
-plt.show()
 if generate_report:
     report = sklearn.metrics.classification_report(act_y,pred_y,labels=[i for i in range(0,8)], output_dict=True)
 
@@ -55,3 +53,6 @@ if generate_report:
 
     with open(f"{model_name}_report.json","w") as f:
         f.write(write_string)
+
+sklearn.metrics.ConfusionMatrixDisplay.from_predictions(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred')
+plt.show()
