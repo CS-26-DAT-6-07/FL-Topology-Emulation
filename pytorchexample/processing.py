@@ -2,6 +2,8 @@ import torch
 import os
 import sklearn
 import json
+import matplotlib.pyplot as plt
+
 
 from models.xception import xception
 from dataset.dataset import no_augment_init_dataset,load_centralized_dataset
@@ -17,6 +19,7 @@ def evaluate(batch,model, device):
     return act.cpu().tolist(), pred_labels.cpu().tolist()
 
 model_name = "fedavg_seed36836"
+generate_report = True
 
 model = xception()
 model.load_state_dict(torch.load(os.getcwd()+f"/finished_models/{model_name}.pt",weights_only=True))
@@ -38,12 +41,17 @@ for batch in dataloader:
     pred_y += pred_list
     count += 1
 
-report = sklearn.metrics.classification_report(act_y,pred_y,labels=[i for i in range(0,8)], output_dict=True)
+#confusion_matrix = sklearn.metrics.confusion_matrix(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred')
 
-print(report)
+sklearn.metrics.ConfusionMatrixDisplay.from_predictions(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred')
+plt.show()
+if generate_report:
+    report = sklearn.metrics.classification_report(act_y,pred_y,labels=[i for i in range(0,8)], output_dict=True)
 
-write_string = json.dumps(report)
+    print(report)
+
+    write_string = json.dumps(report)
 
 
-with open(f"{model_name}_report.json","w") as f:
-    f.write(write_string)
+    with open(f"{model_name}_report.json","w") as f:
+        f.write(write_string)
