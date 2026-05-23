@@ -56,8 +56,9 @@ class FedISIC2019_Dataset():
     global_dataloader = None
     __num_proc = 0
 
-    def __init__(self, seed: int):
+    def __init__(self, seed: int, num_proc = 0):
         self.seed = seed
+        self.__num_proc = num_proc
 
         #Seeding RNG
         if seed is not None:
@@ -415,9 +416,8 @@ class FedISIC2019_Dataset():
             else:
                 print("Need representative partition id")
                 exit(1)
-        
+
         num_of_partitions = self.fds.partitioners["train"].num_partitions
-        
         bar_width = 0.5
         indicies_partitions = [n for n in range(num_of_partitions)]
 
@@ -431,39 +431,88 @@ class FedISIC2019_Dataset():
         scc_counters     = np.zeros(num_of_partitions, dtype=int)
 
         for partition_index in range(num_of_partitions):
-            partition_data = datasets.Dataset.load_from_disk(f"dataset_proccesed_data/partition{partition_index}_augmented")
-
-            partition_label_count = self.get_partition_label_count(partition=partition_data, partition_id=partition_index)
-
-            mel_counters[partition_index] += partition_label_count[0]
+            partition_data = datasets.Dataset.load_from_disk(
+                f"dataset_proccesed_data/partition{partition_index}_augmented"
+            )
+            partition_label_count = self.get_partition_label_count(
+                partition=partition_data, partition_id=partition_index
+            )
+            mel_counters[partition_index]     += partition_label_count[0]
             mel_nev_counters[partition_index] += partition_label_count[1]
-            bcc_counters[partition_index] += partition_label_count[2]
-            ak_counters[partition_index] += partition_label_count[3]
-            bk_counters[partition_index] += partition_label_count[4]
-            df_counters[partition_index] += partition_label_count[5]
-            vl_counters[partition_index] += partition_label_count[6]
-            scc_counters[partition_index] += partition_label_count[7]
-
-        plt.bar(indicies_partitions, mel_counters, bar_width, label="mel")
-        plt.bar(indicies_partitions, mel_nev_counters, bar_width, bottom=mel_counters, label="mel-nev")
-        plt.bar(indicies_partitions, bcc_counters, bar_width, bottom=mel_counters + mel_nev_counters, label="bcc")
-        plt.bar(indicies_partitions, ak_counters, bar_width, bottom=mel_counters + mel_nev_counters + bcc_counters, label="ak")
-        plt.bar(indicies_partitions, bk_counters, bar_width, bottom=mel_counters + mel_nev_counters + bcc_counters + ak_counters, label="bk")
-        plt.bar(indicies_partitions, df_counters, bar_width, bottom=mel_counters + mel_nev_counters + bcc_counters + ak_counters + bk_counters, label="df")
-        plt.bar(indicies_partitions, vl_counters, bar_width, bottom=mel_counters + mel_nev_counters + bcc_counters + ak_counters + bk_counters + df_counters, label="vl")
-        plt.bar(indicies_partitions, scc_counters, bar_width, bottom=mel_counters + mel_nev_counters + bcc_counters + ak_counters + bk_counters + df_counters + vl_counters, label="scc")
+            bcc_counters[partition_index]     += partition_label_count[2]
+            ak_counters[partition_index]      += partition_label_count[3]
+            bk_counters[partition_index]      += partition_label_count[4]
+            df_counters[partition_index]      += partition_label_count[5]
+            vl_counters[partition_index]      += partition_label_count[6]
+            scc_counters[partition_index]     += partition_label_count[7]
         
-        totals = (mel_counters + mel_nev_counters + bcc_counters + ak_counters + bk_counters + df_counters + vl_counters + scc_counters)
 
+        # Color scheme matching the uploaded reference image
+        colors = {
+            "mel":     "#006400",  # dark green       (top)
+            "mel-nev": "#32CD32",  # medium green
+            "bcc":     "#90EE90",  # light green
+            "ak":      "#ADFF2F",  # yellow-green
+            "bk":      "#FFD700",  # yellow
+            "df":      "#FF8C00",  # orange
+            "vl":      "#FF4500",  # red-orange
+            "scc":     "#8B0000",  # dark red/maroon  (bottom)
+        }
+
+        plt.bar(indicies_partitions, scc_counters, bar_width,
+                label="scc", color=colors["scc"])
+
+        plt.bar(indicies_partitions, vl_counters, bar_width,
+                bottom=scc_counters,
+                label="vl", color=colors["vl"])
+
+        plt.bar(indicies_partitions, df_counters, bar_width,
+                bottom=scc_counters + vl_counters,
+                label="df", color=colors["df"])
+
+        plt.bar(indicies_partitions, bk_counters, bar_width,
+                bottom=scc_counters + vl_counters + df_counters,
+                label="bk", color=colors["bk"])
+
+        plt.bar(indicies_partitions, ak_counters, bar_width,
+                bottom=scc_counters + vl_counters + df_counters + bk_counters,
+                label="ak", color=colors["ak"])
+
+        plt.bar(indicies_partitions, bcc_counters, bar_width,
+                bottom=scc_counters + vl_counters + df_counters + bk_counters + ak_counters,
+                label="bcc", color=colors["bcc"])
+
+        plt.bar(indicies_partitions, mel_nev_counters, bar_width,
+                bottom=scc_counters + vl_counters + df_counters + bk_counters + ak_counters + bcc_counters,
+                label="mel-nev", color=colors["mel-nev"])
+
+        plt.bar(indicies_partitions, mel_counters, bar_width,
+                bottom=scc_counters + vl_counters + df_counters + bk_counters + ak_counters + bcc_counters + mel_nev_counters,
+                label="mel", color=colors["mel"])
+
+        # Total count label above each bar
+        totals = (
+            mel_counters + mel_nev_counters + bcc_counters + ak_counters +
+            bk_counters + df_counters + vl_counters + scc_counters
+        )
         for i, total in enumerate(totals):
             plt.text(i, total, str(total), ha="center", va="bottom", fontsize=10)
+
+        # Print label counts per partition
+        label_names = ["mel", "mel-nev", "bcc", "ak", "bk", "df", "vl", "scc"]
+        counters = [mel_counters, mel_nev_counters, bcc_counters, ak_counters,
+            bk_counters, df_counters, vl_counters, scc_counters]
+
+        for partition_index in range(num_of_partitions):
+            print(f"\nPartition {partition_index} (total: {totals[partition_index]}):")
+            for label, counter in zip(label_names, counters):
+                print(f"  {label:<10}: {counter[partition_index]}")
 
         plt.xlabel("Partition ID")
         plt.ylabel("Count")
         plt.xticks(indicies_partitions, [f"{n}" for n in indicies_partitions])
-        plt.title("Per partition Labels Distribution")
-        plt.legend()
-        
+        plt.title("Per Partition Labels Distribution")
+        plt.legend(title="Label")
         plt.show()
 
         return
@@ -552,7 +601,7 @@ def plot_dataloader_batch(dataloader, num_images=8):
 
 if __name__ == "__main__":
     pass
-    #dataset = FedISIC2019_Dataset(67)
+    dataset = FedISIC2019_Dataset(42, num_proc=12)
     #dataset.augment_dataset(0)
 
     #augmented_partition = datasets.Dataset.load_from_disk("dataset_proccesed_data/partition0_augmented")
@@ -561,4 +610,5 @@ if __name__ == "__main__":
 
     #plot_dataloader_batch(dataloader_train_part1)
     #print({"DatasetObjSeed": dataset.seed, "train": list(train_worker_seeds), "test": list(test_worker_seeds)})
-    #dataset.plot_in_partitions_augmented_train_class_distribution(0)
+    dataset.plot_in_partitions_train_class_distribution()
+    dataset.plot_in_partitions_augmented_train_class_distribution(0)
