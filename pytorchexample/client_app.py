@@ -19,7 +19,12 @@ app = ClientApp()
 def train(msg: Message, context: Context):
     """Train the model on local data."""
     model = xception()
-    model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
+    
+    # Clean array record from control variate entries 
+    raw_arrays = msg.content["arrays"].to_torch_state_dict()
+    clean_arrays = {key: value for key, value in raw_arrays.items() if not key.startswith("__")}
+    model.load_state_dict(clean_arrays)
+
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -86,7 +91,11 @@ def train(msg: Message, context: Context):
         return Message(content=content, reply_to=msg)
     
     elif strategy_choice == "scaffold":
-        global_control_variate = msg.content["global_cv"].to_torch_state_dict()
+        combined = msg.content["arrays"].to_torch_state_dict()
+        global_control_variate = {
+            key[len("__gcv__"):]: value 
+            for key, value in combined.items() if key.startswith("__gcv__")
+        }
 
         if "local_cv" in context.state:
             local_control_variate = context.state["local_cv"].to_torch_state_dict()
@@ -94,7 +103,13 @@ def train(msg: Message, context: Context):
             local_control_variate = {key: torch.zeros_like(value) for key, value in model.state_dict().items()}
     
         train_loss, accuracy, updated_local_model, new_local_cv, cv_diff = scaffold_train(
-            model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device, global_control_variate, local_control_variate
+            model, 
+            trainloader, 
+            context.run_config["local-epochs"], 
+            msg.content["config"]["lr"], 
+            device, 
+            global_control_variate, 
+            local_control_variate
         )
 
         with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
@@ -102,13 +117,28 @@ def train(msg: Message, context: Context):
 
         context.state["local_cv"] = ArrayRecord(new_local_cv)   
 
-        metrics = {"train_loss": train_loss, "train_acc": accuracy, "num-examples": len(trainloader.dataset)}
+        #combine model params and cv into the same array record
+        combined_arrays: dict[str, torch.Tensor] = {}
+
+        for key, value in updated_local_model.state_dict().items():
+            combined_arrays[key] = value
+        for key, value in cv_diff.items():
+            combined_arrays[f"__cv__{key}"] = value
+
+        array_record = ArrayRecord(combined_arrays)
+
+        metrics = {
+            "train_loss": train_loss, 
+            "train_acc": accuracy, 
+            "num-examples": len(trainloader.dataset)
+            }
+        metric_record = MetricRecord(metrics)
         
-        # FIX 2: Safely nest BOTH ArrayRecords under the strictly allowed `.arrays` namespace
-        content = RecordDict()
-        content.arrays["arrays"] = ArrayRecord(updated_local_model.state_dict())
-        content.arrays["control_variate"] = ArrayRecord(cv_diff)
-        content.metrics["metrics"] = MetricRecord(metrics)
+        content = RecordDict({
+            "arrays": array_record,
+            "metrics": metric_record
+            })
+
     
         return Message(content=content, reply_to=msg)
     else:

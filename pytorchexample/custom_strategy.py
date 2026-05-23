@@ -185,12 +185,16 @@ class Scaffold(FedAvg):
             state = arrays.to_torch_state_dict()
             self.global_cv = {key: torch.zeros_like(value) for key, value in state.items()}
 
+        #add global cv to array record to send to clients 
+        combined: dict[str, torch.Tensor] = dict(arrays.to_torch_state_dict())
+        for key, value in self.global_cv.items():
+            combined[f"__gcv__{key}"] = value
+
         #Construct message content with global model and control variate
         record = RecordDict(
             {
-                "arrays": arrays,
+                "arrays": ArrayRecord(combined),
                 "config": config,
-                "global_cv": ArrayRecord(self.global_cv),
             }
         )
 
@@ -200,18 +204,30 @@ class Scaffold(FedAvg):
     """aggregate client updates - update global model and control variate"""
     def aggregate_train(
         self,
-        server_round: int,
         replies: Iterable[Message],
     ) -> Tuple[Optional[ArrayRecord], Optional[MetricRecord]]: #Flower 1.29 Fix: Use Tuple return type
 
         valid_replies = [reply for reply in replies if reply.has_content()]
+        if not valid_replies:
+            return None, None
 
-        #build client control variate update dict
-        cv_difference: list[dict[str, torch.Tensor]] = [
-            reply.content["control_variate"].to_torch_state_dict() 
-            for reply in valid_replies
-            if "control_variate" in reply.content
-        ]
+
+        #separate model updates & cv diff from client messages
+        cv_difference: list[dict[str, torch.Tensor]] = []
+        model_states:list[dict[str, torch.Tensor]] = []
+        num_examples_list: list[int] = []
+
+        for reply in valid_replies:
+            combined = reply.content["arrays"].to_torch_state_dict()
+            cv_diff = {key[len("__cv__"):]: value 
+                       for key, value in combined.items() if key.startswith("__cv__")}
+            model_state = {key: value 
+                           for key, value in combined.items() if not key.startswith("__cv__")}
+            cv_difference.append(cv_diff)
+            model_states.append(model_state)
+            num_examples_list.append(
+                int(reply.content["metrics"]["num-examples"])
+                if "num-examples" in reply.content["metrics"] else 1)
 
         #aggregate client control variates into global control variate update
         if cv_difference and self.global_cv is not None:
@@ -221,8 +237,20 @@ class Scaffold(FedAvg):
                     total_cv_diff = torch.stack([cv_diff[key] for cv_diff in cv_difference]).sum(dim=0)    #sum up the control variate differences for this layer across clients
                     self.global_cv[key] = self.global_cv[key] + total_cv_diff / total_clients              #update global control variate by adding average client control variate difference
 
-        #aggregate client model updates with FedAvg
-        return super().aggregate_train(server_round, replies)
+        #aggregate client model updates (cant do fedavg anymore bc control variate is in the same array record)
+        total_examples = sum(num_examples_list)
+        if total_examples == 0:
+            return None, None
+        
+        avg_state = {key: torch.zeros_like(value, dtype=torch.float32)
+                     for key, value in model_states[0].items()}
+        
+        for state, num_examples in zip(model_states, num_examples_list):
+            weight = num_examples / total_examples
+            for key in avg_state:
+                avg_state[key] += weight * state[key].to(torch.float32)
+
+        return ArrayRecord(avg_state), MetricRecord({"num-examples": total_examples})
 
 
 class FedAvgCyclic(FedAvg):
