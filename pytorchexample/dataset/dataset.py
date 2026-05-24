@@ -449,46 +449,33 @@ class FedISIC2019_Dataset():
 
         # Color scheme matching the uploaded reference image
         colors = {
-            "mel":     "#006400",  # dark green       (top)
-            "mel-nev": "#32CD32",  # medium green
-            "bcc":     "#90EE90",  # light green
-            "ak":      "#ADFF2F",  # yellow-green
-            "bk":      "#FFD700",  # yellow
-            "df":      "#FF8C00",  # orange
-            "vl":      "#FF4500",  # red-orange
-            "scc":     "#8B0000",  # dark red/maroon  (bottom)
+            "mel":     "#A50026",  # dark green       (top)
+            "mel-nev": "#E34933",  # medium green
+            "bcc":     "#FCA55D",  # light green
+            "ak":      "#FEE999",  # yellow-green
+            "bk":      "#E3F399",  # yellow
+            "df":      "#9DD569",  # orange
+            "vl":      "#39A758",  # red-orange
+            "scc":     "#006837",  # dark red/maroon  (bottom)
         }
 
-        plt.bar(indicies_partitions, scc_counters, bar_width,
-                label="scc", color=colors["scc"])
+        b0 = np.zeros(num_of_partitions, dtype=int)
+        b1 = b0 + mel_counters
+        b2 = b1 + mel_nev_counters
+        b3 = b2 + bcc_counters
+        b4 = b3 + ak_counters
+        b5 = b4 + bk_counters
+        b6 = b5 + df_counters
+        b7 = b6 + vl_counters
 
-        plt.bar(indicies_partitions, vl_counters, bar_width,
-                bottom=scc_counters,
-                label="vl", color=colors["vl"])
-
-        plt.bar(indicies_partitions, df_counters, bar_width,
-                bottom=scc_counters + vl_counters,
-                label="df", color=colors["df"])
-
-        plt.bar(indicies_partitions, bk_counters, bar_width,
-                bottom=scc_counters + vl_counters + df_counters,
-                label="bk", color=colors["bk"])
-
-        plt.bar(indicies_partitions, ak_counters, bar_width,
-                bottom=scc_counters + vl_counters + df_counters + bk_counters,
-                label="ak", color=colors["ak"])
-
-        plt.bar(indicies_partitions, bcc_counters, bar_width,
-                bottom=scc_counters + vl_counters + df_counters + bk_counters + ak_counters,
-                label="bcc", color=colors["bcc"])
-
-        plt.bar(indicies_partitions, mel_nev_counters, bar_width,
-                bottom=scc_counters + vl_counters + df_counters + bk_counters + ak_counters + bcc_counters,
-                label="mel-nev", color=colors["mel-nev"])
-
-        plt.bar(indicies_partitions, mel_counters, bar_width,
-                bottom=scc_counters + vl_counters + df_counters + bk_counters + ak_counters + bcc_counters + mel_nev_counters,
-                label="mel", color=colors["mel"])
+        plt.bar(indicies_partitions, mel_counters,     bar_width, bottom=b0, label="mel",     color=colors["mel"])
+        plt.bar(indicies_partitions, mel_nev_counters, bar_width, bottom=b1, label="mel-nev", color=colors["mel-nev"])
+        plt.bar(indicies_partitions, bcc_counters,     bar_width, bottom=b2, label="bcc",     color=colors["bcc"])
+        plt.bar(indicies_partitions, ak_counters,      bar_width, bottom=b3, label="ak",      color=colors["ak"])
+        plt.bar(indicies_partitions, bk_counters,      bar_width, bottom=b4, label="bk",      color=colors["bk"])
+        plt.bar(indicies_partitions, df_counters,      bar_width, bottom=b5, label="df",      color=colors["df"])
+        plt.bar(indicies_partitions, vl_counters,      bar_width, bottom=b6, label="vl",      color=colors["vl"])
+        plt.bar(indicies_partitions, scc_counters,     bar_width, bottom=b7, label="scc",     color=colors["scc"])
 
         # Total count label above each bar
         totals = (
