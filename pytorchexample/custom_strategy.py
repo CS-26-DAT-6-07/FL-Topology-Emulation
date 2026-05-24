@@ -204,6 +204,7 @@ class Scaffold(FedAvg):
     """aggregate client updates - update global model and control variate"""
     def aggregate_train(
         self,
+        server_round: int,
         replies: Iterable[Message],
     ) -> Tuple[Optional[ArrayRecord], Optional[MetricRecord]]: #Flower 1.29 Fix: Use Tuple return type
 
