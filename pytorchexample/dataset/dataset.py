@@ -359,7 +359,7 @@ class FedISIC2019_Dataset():
             partition_id_axis="x",
             legend=True,
             verbose_labels=True,
-            title="Per Partition Labels Distribution"
+            title="Per Partition Labels Distribution (Pre-Augmentation)"
         )
 
         #Adding sample counts per partitions to the figure
@@ -498,7 +498,7 @@ class FedISIC2019_Dataset():
         plt.xlabel("Partition ID")
         plt.ylabel("Count")
         plt.xticks(indicies_partitions, [f"{n}" for n in indicies_partitions])
-        plt.title("Per Partition Labels Distribution")
+        plt.title("Per Partition Labels Distribution (Post-Augmentation)")
         plt.legend(title="Label")
         plt.show()
 
