@@ -217,6 +217,9 @@ class Scaffold(FedAvg):
         cv_difference: list[dict[str, torch.Tensor]] = []
         model_states:list[dict[str, torch.Tensor]] = []
         num_examples_list: list[int] = []
+        train_losses: list[float] = []
+        train_accs: list[float] = []
+
 
         for reply in valid_replies:
             combined = reply.content["arrays"].to_torch_state_dict()
@@ -229,6 +232,12 @@ class Scaffold(FedAvg):
             num_examples_list.append(
                 int(reply.content["metrics"]["num-examples"])
                 if "num-examples" in reply.content["metrics"] else 1)
+            
+            # Extract train_loss and train_acc from client metrics
+            if "train_loss" in reply.content["metrics"]:
+                train_losses.append((float(reply.content["metrics"]["train_loss"]), int(reply.content["metrics"]["num-examples"])))
+            if "train_acc" in reply.content["metrics"]:
+                train_accs.append((float(reply.content["metrics"]["train_acc"]), int(reply.content["metrics"]["num-examples"])))
 
         #aggregate client control variates into global control variate update
         if cv_difference and self.global_cv is not None:
@@ -251,7 +260,19 @@ class Scaffold(FedAvg):
             for key in avg_state:
                 avg_state[key] += weight * state[key].to(torch.float32)
 
-        return ArrayRecord(avg_state), MetricRecord({"num-examples": total_examples})
+        #Weighted average aggregation for train_loss and train_acc
+        aggregated_metrics: dict[str, float] = {"num-examples": total_examples}
+
+        if train_losses:
+            aggregated_metrics["train_loss"] = (
+                sum(loss * n for loss, n in train_losses) / sum(n for _, n in train_losses)
+            )
+        if train_accs:
+            aggregated_metrics["train_acc"] = (
+                sum(acc * n for acc, n in train_accs) / sum(n for _, n in train_accs)
+            )
+
+        return ArrayRecord(avg_state), MetricRecord(aggregated_metrics)
 
 
 class FedAvgCyclic(FedAvg):
