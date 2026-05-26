@@ -50,6 +50,10 @@ class TreeStrategy(FedAvg):
         replies_list = list(replies)
         if not replies_list:
             return None, None
+        
+        #Lists to hold the client metrics (train loss and acc)
+        train_losses: list[float] = []
+        train_accs: list[float] = []
 
         # STEP 1: EXTRACT FEATURE VECTORS
         client_ids = []
@@ -61,14 +65,21 @@ class TreeStrategy(FedAvg):
                 print(f"Empty message received in round {server_round}. Skipping client.")
                 continue
 
-            # --- FLOWER 1.29 FIX: Access the metrics namespace strictly ---
+            #Access the metrics namespace strictly
             metric_record = reply.content["metrics"]
             
             client_ids.append(int(metric_record["partition_id"]))
             feature_vectors.append(metric_record["feature_vector"])
             valid_replies.append(reply)
 
-            #.---Print the round, feature vector len and the client its coming from---
+            #Extracting metrics for global weighted average
+            num_examples = int(metric_record["num-examples"]) if "num-examples" in metric_record else 1
+            if "train_loss" in metric_record:
+                train_losses.append((float(metric_record["train_loss"]), num_examples))
+            if "train_acc" in metric_record:
+                train_accs.append((float(metric_record["train_acc"]), num_examples))
+
+            #Print the round, feature vector len and the client its coming from
             pid = metric_record["partition_id"]
             fv_len = len(metric_record["feature_vector"])
             print(f"[DEBUG - Server] Round {server_round}: Received feature vector of length {fv_len} from Client {pid}", flush=True)
@@ -76,13 +87,13 @@ class TreeStrategy(FedAvg):
         if not valid_replies:
             return None, None
 
-        # STEP 2: RUN K-MEANS CLUSTERING
+        #STEP 2: RUN K-MEANS CLUSTERING
         X = np.array(feature_vectors)
         num_clusters = min(2, len(X))
         kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init="auto")
         cluster_labels = kmeans.fit_predict(X)
 
-        # STEP 3: CREATE NEW EDGE GROUPS
+        #STEP 3: CREATE NEW EDGE GROUPS
         new_edge_groups = {0: [], 1: []}
         for client_id, cluster_id in zip(client_ids, cluster_labels):
             new_edge_groups[int(cluster_id)].append(int(client_id))
@@ -102,7 +113,7 @@ class TreeStrategy(FedAvg):
 
         print(f"\nNew clustered edge groups: {self.edge_groups}")
 
-        # STEP 4: GROUP REPLIES BY EDGE SERVER
+        # STEP 4: GROUP REPLIES BY EDGE-SERVERS
         edge_replies = {0: [], 1: []}
         for reply in valid_replies:
            
@@ -114,13 +125,13 @@ class TreeStrategy(FedAvg):
                     edge_replies[edge_id].append(reply)
                     break
 
-        # STEP 5 & 6: AGGREGATE PER EDGE AND THEN GLOBALLY
+        #STEP 5 + 6: AGGREGATE PER EDGE AND THEN GLOBALLY
         edge_aggregates = []
         for edge_id, group_messages in edge_replies.items():
             if not group_messages:
                 continue
             
-            # --- FLOWER 1.29 FIX: Access namespace ---
+            #FLOWER 1.29 FIX: Access namespace
             group_examples = sum(int(msg.content["metrics"]["num-examples"]) for msg in group_messages)
             
             edge_arrays, _ = super().aggregate_train(server_round, group_messages)
@@ -131,7 +142,7 @@ class TreeStrategy(FedAvg):
         if not edge_aggregates:
             return None, None
 
-        # STEP 6 (Cont.): GLOBAL WEIGHTED AVERAGE
+        #STEP 6: GLOBAL WEIGHTED AVERAGE
         total_examples = sum(count for _, count in edge_aggregates)
         
         first_arrays, _ = edge_aggregates[0]
@@ -144,8 +155,19 @@ class TreeStrategy(FedAvg):
             for key in avg_state:
                 avg_state[key] += weight * client_state[key].to(torch.float32)
 
-        return ArrayRecord(avg_state), MetricRecord({"num-examples": total_examples})
+        aggregated_metrics: dict[str, float] = {"num-examples": total_examples}
 
+        if train_losses:
+            aggregated_metrics["train_loss"] = (
+                sum(loss * n for loss, n in train_losses) / sum(n for _, n in train_losses)
+            )
+        if train_accs:
+            aggregated_metrics["train_acc"] = (
+                sum(acc * n for acc, n in train_accs) / sum(n for _, n in train_accs)
+            )
+
+        return ArrayRecord(avg_state), MetricRecord(aggregated_metrics)
+    
 class Scaffold(FedAvg):
     def __init__(self, initial_parameters: ArrayRecord, lr: float, *args, **kwargs):
         super().__init__(*args, **kwargs)
