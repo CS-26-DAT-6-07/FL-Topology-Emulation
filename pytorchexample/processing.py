@@ -19,7 +19,7 @@ def evaluate(batch,model, device):
     return act.cpu().tolist(), pred_labels.cpu().tolist()
 
 model_name = "fedavg_seed36836"
-generate_report = True
+generate_report = False
 
 model = xception()
 model.load_state_dict(torch.load(os.getcwd()+f"/finished_models/{model_name}.pt",weights_only=True))
@@ -54,5 +54,5 @@ if generate_report:
     with open(f"{model_name}_report.json","w") as f:
         f.write(write_string)
 
-sklearn.metrics.ConfusionMatrixDisplay.from_predictions(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred')
+sklearn.metrics.ConfusionMatrixDisplay.from_predictions(act_y,pred_y,labels=[i for i in range(0,8)], normalize='pred', display_labels=["mel", "mel-nev", "bcc", "ak", "bk", "df", "vl", "scc"])
 plt.show()
