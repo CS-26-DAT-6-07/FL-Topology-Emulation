@@ -1,6 +1,6 @@
 ---
 dataset: [Fed-ISIC19]
-framework: [torch, torchvision]
+framework: [flower, torch, torchvision]
 ---
 
 # Mitigating Attribute Skew Using Network Topology Emulation in Federated Learning Systems
