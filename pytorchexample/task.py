@@ -190,11 +190,15 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
                         continue
                     if name not in local_cv or name not in global_cv:
                         continue
-                    param.grad.data.add_(                                       #add correction term to original gradient
-                        global_cv[name].to(device) - local_cv[name].to(device)  #subtract client bias
+                    
+                    #param.grad.data.add_(                                       #add correction term to original gradient
+                    #    global_cv[name].to(device) - local_cv[name].to(device)  #subtract client bias
+                    #)
+                    param.data.add_(
+                        -lr*(param.grad.to(device) - local_cv[name].to(device) + global_cv[name].to(device))
                     )
 
-            optimizer.step()
+            #optimizer.step()
  
             running_loss += loss.item()
             correct += (outputs.argmax(dim=1) == labels).sum().item()
@@ -214,20 +218,17 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
     #compute new local control variate
     new_local_cv: dict[str, torch.Tensor] = {}
     cv_diff: dict[str, torch.Tensor] = {}
-
-    
     with torch.no_grad():
-        for key in init_global_params:
-            # 1. Calculate drift on the active training device (GPU/CPU)
-            client_drift = init_global_params[key] - updated_model[key]                         
-            
-            # 2. Explicitly move control variates to the same device for the math
-            new_client_cv = local_cv[key].to(device) - global_cv[key].to(device) + scaling_factor * client_drift      
-            
-            # 3. Bring them back to the CPU so Flower can package them safely
-            new_local_cv[key] = new_client_cv.cpu()                                                   
-            cv_diff[key] = (new_client_cv - local_cv[key].to(device)).cpu()                                        
-
+            for key in init_global_params:
+                # 1. Calculate drift on the active training device (GPU/CPU)
+                client_drift = init_global_params[key] - updated_model[key]                         
+                
+                # 2. Explicitly move control variates to the same device for the math
+                new_client_cv = local_cv[key].to(device) - global_cv[key].to(device) + scaling_factor * client_drift      
+                
+                # 3. Bring them back to the CPU so Flower can package them safely
+                new_local_cv[key] = new_client_cv.cpu()                                                   
+                cv_diff[key] = (new_client_cv - local_cv[key].to(device)).cpu()  
     return avg_train_loss, accuracy, net, new_local_cv, cv_diff
 
 def test(net, testloader, device, global_eval=False):

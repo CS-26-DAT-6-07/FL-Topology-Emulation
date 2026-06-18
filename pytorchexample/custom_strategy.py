@@ -264,10 +264,11 @@ class Scaffold(FedAvg):
         #aggregate client control variates into global control variate update
         if cv_difference and self.global_cv is not None:
             total_clients = len(cv_difference)
+            sampled_clients = len(valid_replies)
             with torch.no_grad():
                 for key in self.global_cv.keys():                                                          #loop through each layer of the model
-                    total_cv_diff = torch.stack([cv_diff[key] for cv_diff in cv_difference]).sum(dim=0)    #sum up the control variate differences for this layer across clients
-                    self.global_cv[key] = self.global_cv[key] + total_cv_diff / total_clients              #update global control variate by adding average client control variate difference
+                    total_cv_diff = (1/sampled_clients)*torch.stack([cv_diff[key] for cv_diff in cv_difference]).sum(dim=0)    #sum up the control variate differences for this layer across clients
+                    self.global_cv[key] = self.global_cv[key] + (sampled_clients / total_clients)*total_cv_diff            #update global control variate by adding average client control variate difference
 
         #aggregate client model updates (cant do fedavg anymore bc control variate is in the same array record)
         total_examples = sum(num_examples_list)
