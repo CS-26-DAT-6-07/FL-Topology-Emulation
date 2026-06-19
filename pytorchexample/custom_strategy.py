@@ -280,6 +280,7 @@ class Scaffold(FedAvg):
         #             for key, value in model_states[0].items()}
         new_global = {key: torch.zeros_like(value, dtype=torch.float32)
                      for key, value in model_states[0].items()}
+        #Calculate the new model
         with torch.no_grad():
             for key in self.global_state.keys():
                 model_diff = (1/sampled_clients)*(torch.stack([model[key] - self.global_state[key] for model in model_states]).sum(dim=0))
