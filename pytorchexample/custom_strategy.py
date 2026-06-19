@@ -207,7 +207,7 @@ class Scaffold(FedAvg):
         if self.global_cv is None:
             state = arrays.to_torch_state_dict()
             self.global_cv = {key: torch.zeros_like(value) for key, value in state.items()}
-        self.state
+        
         #add global cv to array record to send to clients 
         combined: dict[str, torch.Tensor] = dict(arrays.to_torch_state_dict())
         for key, value in self.global_cv.items():
