@@ -202,11 +202,12 @@ class Scaffold(FedAvg):
         )
         config["server-round"] = server_round
 
+        self.global_state = arrays.to_torch_state_dict()
         #Save initial server param & set control variate to zero on first round
         if self.global_cv is None:
             state = arrays.to_torch_state_dict()
             self.global_cv = {key: torch.zeros_like(value) for key, value in state.items()}
-
+        self.state
         #add global cv to array record to send to clients 
         combined: dict[str, torch.Tensor] = dict(arrays.to_torch_state_dict())
         for key, value in self.global_cv.items():
@@ -275,14 +276,21 @@ class Scaffold(FedAvg):
         if total_examples == 0:
             return None, None
         
-        avg_state = {key: torch.zeros_like(value, dtype=torch.float32)
+        #avg_state = {key: torch.zeros_like(value, dtype=torch.float32)
+        #             for key, value in model_states[0].items()}
+        new_global = {key: torch.zeros_like(value, dtype=torch.float32)
                      for key, value in model_states[0].items()}
+        with torch.no_grad():
+            for key in self.global_state.keys():
+                model_diff = (1/sampled_clients)*(torch.stack([model[key] - self.global_state[key] for model in model_states]).sum(dim=0))
+                new_global[key] = self.global_state[key] + self.lr*model_diff
         
+        '''
         for state, num_examples in zip(model_states, num_examples_list):
             weight = num_examples / total_examples
             for key in avg_state:
                 avg_state[key] += weight * state[key].to(torch.float32)
-
+        '''
         #Weighted average aggregation for train_loss and train_acc
         aggregated_metrics: dict[str, float] = {"num-examples": total_examples}
 
@@ -295,7 +303,7 @@ class Scaffold(FedAvg):
                 sum(acc * n for acc, n in train_accs) / sum(n for _, n in train_accs)
             )
 
-        return ArrayRecord(avg_state), MetricRecord(aggregated_metrics)
+        return ArrayRecord(new_global), MetricRecord(aggregated_metrics)
 
 
 class FedAvgCyclic(FedAvg):

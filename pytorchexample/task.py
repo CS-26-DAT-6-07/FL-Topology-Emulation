@@ -191,14 +191,12 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
                     if name not in local_cv or name not in global_cv:
                         continue
                     
-                    #param.grad.data.add_(                                       #add correction term to original gradient
-                    #    global_cv[name].to(device) - local_cv[name].to(device)  #subtract client bias
-                    #)
-                    param.data.add_(
-                        -lr*(param.grad.to(device) - local_cv[name].to(device) + global_cv[name].to(device))
+                    param.grad.data.add_(                                       #add correction term to original gradient
+                        global_cv[name].to(device) - local_cv[name].to(device)  #subtract client bias
                     )
 
-            #optimizer.step()
+
+            optimizer.step()
  
             running_loss += loss.item()
             correct += (outputs.argmax(dim=1) == labels).sum().item()
