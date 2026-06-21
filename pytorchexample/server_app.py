@@ -6,6 +6,7 @@ import torch
 import json
 import os
 
+
 from pytorchexample.task import test 
 from pytorchexample.models.xception import xception
 from pytorchexample.dataset.dataset import load_centralized_dataset, init_dataset
@@ -100,15 +101,15 @@ def main(grid: Grid, context: Context) -> None:
 
     #Saving final metrics to disk
     print("\nSaving final metrics to disk...")
-    with open(f"experiment_{strategy_choice}/train_metrics_clientapp", "w") as f:
+    with open(f"experiment_{strategy_choice}/train_metrics_clientapp.json", "w") as f:
         serializable = {i: dict(metric_round) for i, metric_round in result.train_metrics_clientapp.items()}
         f.write(json.dumps(serializable))
 
-    with open(f"experiment_{strategy_choice}/evaluate_metrics_clientapp", "w") as f:
+    with open(f"experiment_{strategy_choice}/evaluate_metrics_clientapp.json", "w") as f:
         serializable = {i: dict(metric_round) for i, metric_round in result.evaluate_metrics_clientapp.items()}
         f.write(json.dumps(serializable))
 
-    with open(f"experiment_{strategy_choice}/evaluate_metrics_serverapp", "w") as f:
+    with open(f"experiment_{strategy_choice}/evaluate_metrics_serverapp.json", "w") as f:
         serializable = {i: dict(metric_round) for i, metric_round in result.evaluate_metrics_serverapp.items()}
         f.write(json.dumps(serializable))
 
