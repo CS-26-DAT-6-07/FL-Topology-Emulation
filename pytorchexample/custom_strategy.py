@@ -11,7 +11,7 @@ from logging import INFO
 
 from flwr.app import ArrayRecord, ConfigRecord, Context, Message, RecordDict, MessageType, MetricRecord
 from flwr.serverapp import Grid
-from flwr.serverapp.strategy import FedAvg
+from flwr.serverapp.strategy import FedAvg, FedProx
 from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters, FitIns, log
 from flwr.server.strategy.aggregate import aggregate
 from flwr.serverapp.strategy.strategy_utils import sample_nodes
@@ -19,9 +19,10 @@ from flwr.serverapp.strategy.strategy_utils import sample_nodes
 
 
 class TreeStrategy(FedAvg):
-    def __init__(self, edge_groups, *args, **kwargs):
+    def __init__(self, edge_groups, proximal_mu=0.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.edge_groups = edge_groups
+        self.proximal_mu = proximal_mu
 
     #A bunch of stuff had to change to fit flower 1.29
     def configure_train(
@@ -33,7 +34,11 @@ class TreeStrategy(FedAvg):
     ) -> Iterable[Message]:
         """Configure the next round of federated training."""
         #print(f"------------- Round {server_round}: Configuring training -------------", flush=True)
-    
+
+        config["proximal-mu"] = self.proximal_mu
+
+        print(f"[SERVER] Round {server_round}: sending proximal_mu={self.proximal_mu}",flush=True,)
+
         return super().configure_train(
             server_round=server_round,
             arrays=arrays,

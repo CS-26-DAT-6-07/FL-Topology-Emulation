@@ -130,12 +130,13 @@ def load_centralized_dataset(batch_size: int = 128):
     return DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-def train(net, trainloader, epochs, lr, device):
+def train(net, trainloader, epochs, lr, device, proximal_mu=0.0):
     """Train the model on the training set (standard FedAvg / FedProx)."""
     net.to(device)
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
- 
+    reference_params = [p.detach().clone() for p in net.parameters()]
+    
     net.train()
     running_loss = 0.0
     correct = 0
@@ -148,6 +149,18 @@ def train(net, trainloader, epochs, lr, device):
             optimizer.zero_grad()
             outputs = net(images.float())
             loss = criterion(outputs, labels)
+
+            #FedProx part for FedTree
+            if proximal_mu > 0.0:
+
+                print(f"[FedProx ACTIVE] mu={proximal_mu}", flush=True)
+                
+                proximal_term = torch.tensor(0.0, device=device)
+                for local_param, reference_param in zip(net.parameters(), reference_params):
+                    proximal_term += torch.sum((local_param - reference_param) ** 2)
+
+                loss = loss + (proximal_mu / 2.0) * proximal_term
+
             loss.backward()
             optimizer.step()
  

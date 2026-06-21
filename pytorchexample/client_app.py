@@ -38,12 +38,14 @@ def train(msg: Message, context: Context):
         exit(555)
 
     strategy_choice = msg.content["config"]["strategy_choice"]
+
+    mu = float(msg.content["config"]["proximal-mu"]) if "proximal-mu" in msg.content["config"] else 0.0
     
     # FIX 3: Ensure the experiment directory actually exists before writing to it
     os.makedirs(f"experiment_{strategy_choice}", exist_ok=True)
 
     if strategy_choice in ["fedavg", "fedprox", "fedavgcycle"]:
-        train_loss, accuracy = train_fn(model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device)
+        train_loss, accuracy = train_fn(model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device, proximal_mu=mu)
 
         with open(f"experiment_{strategy_choice}/client_{partition_id}_train_seeds.json", "w") as f:
             f.write(json.dumps([seed for seed in train_seed_list]))
@@ -67,8 +69,9 @@ def train(msg: Message, context: Context):
 
         hook_handle = model.bn4.register_forward_hook(hook)
 
+        
         # Train locally
-        train_loss, accuracy = train_fn(model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device)
+        train_loss, accuracy = train_fn(model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device, proximal_mu=mu,)
 
         hook_handle.remove()
 
