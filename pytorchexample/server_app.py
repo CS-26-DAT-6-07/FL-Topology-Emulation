@@ -37,6 +37,7 @@ def main(grid: Grid, context: Context) -> None:
     lr: float = context.run_config["learning-rate"]
     strategy_choice: str = context.run_config["strategy-choice"]
     mu_prox: float = context.run_config["mu-prox"] #for fedprox only
+    edge_rounds: int = context.run_config["edge-rounds"]
 
     # Create experiment folder
     folder_path = f"experiment_{strategy_choice}"
@@ -63,6 +64,7 @@ def main(grid: Grid, context: Context) -> None:
             edge_groups=EDGE_GROUPS,
             fraction_evaluate=fraction_evaluate,
             proximal_mu=mu_prox,
+            edge_rounds=edge_rounds,
             fraction_train=fraction_train,
             min_available_nodes=6,
 

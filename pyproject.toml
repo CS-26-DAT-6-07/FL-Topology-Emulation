@@ -39,3 +39,4 @@ learning-rate = 0.03
 batch-size = 4
 num-partitions = 6
 mu-prox = 0.01
+edge-rounds = 5

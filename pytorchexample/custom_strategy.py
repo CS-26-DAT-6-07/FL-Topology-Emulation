@@ -17,161 +17,387 @@ from flwr.server.strategy.aggregate import aggregate
 from flwr.serverapp.strategy.strategy_utils import sample_nodes
 
 
-
 class TreeStrategy(FedAvg):
-    def __init__(self, edge_groups, proximal_mu=0.0, *args, **kwargs):
+    def __init__(self, edge_groups, proximal_mu=0.0, edge_rounds=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        #Starting edge groups from server_app.py
+        #These are only used until KMeans has made the real groups
         self.edge_groups = edge_groups
+
+        #For FedProx
         self.proximal_mu = proximal_mu
 
-    #A bunch of stuff had to change to fit flower 1.29
+        #How many edge rounds before global aggregation
+        self.edge_rounds = max(1, int(edge_rounds))
+
+        # Number of clusters we want KMeans to make
+        self.num_edges = len(edge_groups)
+
+        #Stores latest model for each edge group
+        self.edge_arrays = {}
+
+        #Stores the latest global model
+        self.global_arrays = None
+
+        #Learns the Flower node_id -> partition_id after first reply
+        self.node_to_partition = {}
+
+        #KMeans should only run once (Updated now)
+        self.clusters_frozen = False
+
+        #Number of rounds we do k means clustering before mutiple agregations
+        self.cluster_round = 10
+
+
+    def _edge_for_partition(self, partition_id: int):
+        #Find which edge group a partition belongs to
+        for edge_id, group in self.edge_groups.items():
+            if partition_id in group:
+                return edge_id
+        return None
+
+
+    def _weighted_average_arrayrecords(self, weighted_arrays):
+        #Weighted average of edge models
+        #weighted_arrays =  [(ArrayRecord, num_examples), ...]
+
+        total_examples = sum(count for _, count in weighted_arrays)
+        first_state = weighted_arrays[0][0].to_torch_state_dict()
+
+        avg_state = {}
+
+        for key, first_value in first_state.items():
+
+            #Only average float tensors
+            if torch.is_floating_point(first_value):
+                avg_tensor = torch.zeros_like(first_value, dtype=torch.float32)
+
+                for arrays, count in weighted_arrays:
+                    weight = count / total_examples
+                    state = arrays.to_torch_state_dict()
+                    avg_tensor += weight * state[key].to(torch.float32)
+
+                avg_state[key] = avg_tensor.to(dtype=first_value.dtype)
+
+            #For things like BatchNorm num_batches_tracked
+            else:
+                avg_state[key] = first_value.clone()
+
+        return ArrayRecord(avg_state)
+
+
     def configure_train(
-        self, 
-        server_round: int, 
-        arrays: ArrayRecord, 
-        config: ConfigRecord, 
-        grid: Grid
+        self,
+        server_round: int,
+        arrays: ArrayRecord,
+        config: ConfigRecord,
+        grid: Grid,
     ) -> Iterable[Message]:
-        """Configure the next round of federated training."""
-        #print(f"------------- Round {server_round}: Configuring training -------------", flush=True)
+        """Send edge model if we have one, otherwise send global model."""
 
+        if self.fraction_train == 0.0:
+            return []
+
+        #Save first global model
+        if self.global_arrays is None:
+            self.global_arrays = arrays
+
+        #FLOWER 1.29 FIX: sample nodes manually because we send different models
+        num_nodes = int(len(list(grid.get_node_ids())) * self.fraction_train)
+        sample_size = max(num_nodes, self.min_train_nodes)
+        node_ids, _ = sample_nodes(grid, self.min_available_nodes, sample_size)
+
+        #Send FedProx mu to clients
         config["proximal-mu"] = self.proximal_mu
+        config["server-round"] = server_round
 
-        print(f"[SERVER] Round {server_round}: sending proximal_mu={self.proximal_mu}",flush=True,)
+        messages = []
 
-        return super().configure_train(
-            server_round=server_round,
-            arrays=arrays,
-            config=config,
-            grid=grid
-        )
+        for node_id in node_ids:
+
+            #We only know partition_id after client has replied once
+            node_id_key = str(node_id)
+            partition_id = self.node_to_partition.get(node_id_key)
+
+            edge_id = (
+                self._edge_for_partition(partition_id)
+                if partition_id is not None
+                else None
+            )
+
+            #If we know the client edge, send edge model
+            if edge_id is not None and edge_id in self.edge_arrays:
+                arrays_to_send = self.edge_arrays[edge_id]
+
+                print(
+                    f"[SERVER] Round {server_round}: sending EDGE model {edge_id} "
+                    f"to partition {partition_id}",
+                    flush=True,
+                )
+
+            #First round / unknown client gets global model
+            else:
+                arrays_to_send = self.global_arrays
+
+                print(
+                    f"[SERVER] Round {server_round}: sending GLOBAL model to node {node_id}",
+                    flush=True,
+                )
+
+            record = RecordDict(
+                {
+                    "arrays": arrays_to_send,
+                    "config": config,
+                }
+            )
+
+            messages.append(
+                Message(
+                    content=record,
+                    dst_node_id=node_id,
+                    message_type=MessageType.TRAIN,
+                )
+            )
+
+        return messages
+
 
     def aggregate_train(
-        self, 
-        server_round: int, 
-        replies: Iterable[Message]
+        self,
+        server_round: int,
+        replies: Iterable[Message],
     ) -> Tuple[Optional[ArrayRecord], Optional[MetricRecord]]:
-        
+
         replies_list = list(replies)
         if not replies_list:
             return None, None
-        
-        #Lists to hold the client metrics (train loss and acc)
-        train_losses: list[float] = []
-        train_accs: list[float] = []
 
-        # STEP 1: EXTRACT FEATURE VECTORS
+        #Client metrics
+        train_losses = []
+        train_accs = []
+
+        #Used for KMeans first time
         client_ids = []
         feature_vectors = []
-        valid_replies = [] 
+        valid_replies = []
 
+        #STEP 1: collect replies
         for reply in replies_list:
             if not reply.has_content():
                 print(f"Empty message received in round {server_round}. Skipping client.")
                 continue
 
-            #Access the metrics namespace strictly
             metric_record = reply.content["metrics"]
-            
-            client_ids.append(int(metric_record["partition_id"]))
+
+            partition_id = int(metric_record["partition_id"])
+            node_id = str(reply.metadata.src_node_id)
+
+            #Save Flower node -> partition mapping
+            self.node_to_partition[node_id] = partition_id
+
+            client_ids.append(partition_id)
             feature_vectors.append(metric_record["feature_vector"])
             valid_replies.append(reply)
 
-            #Extracting metrics for global weighted average
-            num_examples = int(metric_record["num-examples"]) if "num-examples" in metric_record else 1
+            num_examples = (
+                int(metric_record["num-examples"])
+                if "num-examples" in metric_record
+                else 1
+            )
+
             if "train_loss" in metric_record:
                 train_losses.append((float(metric_record["train_loss"]), num_examples))
+
             if "train_acc" in metric_record:
                 train_accs.append((float(metric_record["train_acc"]), num_examples))
 
-            #Print the round, feature vector len and the client its coming from
-            pid = metric_record["partition_id"]
-            fv_len = len(metric_record["feature_vector"])
-            print(f"[DEBUG - Server] Round {server_round}: Received feature vector of length {fv_len} from Client {pid}", flush=True)
+            print(
+                f"[SERVER] Round {server_round}: got update from client {partition_id}",
+                flush=True,
+            )
 
         if not valid_replies:
             return None, None
 
-        #STEP 2: RUN K-MEANS CLUSTERING
-        X = np.array(feature_vectors)
-        num_clusters = min(2, len(X))
-        kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init="auto")
-        cluster_labels = kmeans.fit_predict(X)
+        #Before KMeans, just do normal global aggregation
+        if not self.clusters_frozen and server_round < self.cluster_round:
+            print(
+                f"[SERVER] Round {server_round}: warmup round before KMeans. Doing normal global aggregation.",
+                flush=True,
+            )
 
-        #STEP 3: CREATE NEW EDGE GROUPS
-        new_edge_groups = {0: [], 1: []}
-        for client_id, cluster_id in zip(client_ids, cluster_labels):
-            new_edge_groups[int(cluster_id)].append(int(client_id))
-        
-        self.edge_groups = new_edge_groups
+            global_arrays, _ = super().aggregate_train(server_round, valid_replies)
 
-        if len(X) > 1:
-            pca = PCA(n_components=2)
-            X_pca = pca.fit_transform(X)
-            plt.figure(figsize=(6, 4))
-            plt.scatter(X_pca[:, 0], X_pca[:, 1], c=cluster_labels, cmap='viridis')
-            for i, cid in enumerate(client_ids):
-                plt.annotate(f"C{cid}", (X_pca[i, 0], X_pca[i, 1]))
-            plt.title(f"Round {server_round} Clusters")
-            plt.savefig(f"experiment_fedtree/cluster_images/round_{server_round}_clusters.png")
-            plt.close()
+            if global_arrays is None:
+                return None, None
 
-        print(f"\nNew clustered edge groups: {self.edge_groups}")
+            self.global_arrays = global_arrays
 
-        # STEP 4: GROUP REPLIES BY EDGE-SERVERS
-        edge_replies = {0: [], 1: []}
+            total_examples = sum(
+                int(reply.content["metrics"]["num-examples"])
+                for reply in valid_replies
+            )
+
+            aggregated_metrics: dict[str, float] = {
+                "num-examples": total_examples,
+            }
+
+            if train_losses:
+                aggregated_metrics["train_loss"] = (
+                    sum(loss * n for loss, n in train_losses)
+                    / sum(n for _, n in train_losses)
+                )
+
+            if train_accs:
+                aggregated_metrics["train_acc"] = (
+                    sum(acc * n for acc, n in train_accs)
+                    / sum(n for _, n in train_accs)
+                )
+
+            return global_arrays, MetricRecord(aggregated_metrics)
+
+        #STEP 2: run KMeans ONLY ONCE
+        if not self.clusters_frozen and server_round >= self.cluster_round:
+            X = np.array(feature_vectors)
+
+            num_clusters = min(self.num_edges, len(X))
+
+            kmeans = KMeans(
+                n_clusters=num_clusters,
+                random_state=42,
+                n_init="auto",
+            )
+
+            cluster_labels = kmeans.fit_predict(X)
+
+            new_edge_groups = {edge_id: [] for edge_id in range(num_clusters)}
+
+            for client_id, cluster_id in zip(client_ids, cluster_labels):
+                new_edge_groups[int(cluster_id)].append(int(client_id))
+
+            self.edge_groups = new_edge_groups
+            self.clusters_frozen = True
+
+            print(
+                f"\n[SERVER] KMeans done. Frozen edge groups: {self.edge_groups}",
+                flush=True,
+            )
+
+            #Save cluster plot like before
+            if len(X) > 1:
+                pca = PCA(n_components=2)
+                X_pca = pca.fit_transform(X)
+
+                plt.figure(figsize=(6, 4))
+                plt.scatter(X_pca[:, 0], X_pca[:, 1], c=cluster_labels, cmap="viridis")
+
+                for i, cid in enumerate(client_ids):
+                    plt.annotate(f"C{cid}", (X_pca[i, 0], X_pca[i, 1]))
+
+                plt.title(f"Round {server_round} Frozen KMeans Clusters")
+                plt.savefig(f"experiment_fedtree/cluster_images/round_{server_round}_clusters.png")
+                plt.close()
+
+        else:
+            print(
+                f"[SERVER] Round {server_round}: using frozen edge groups {self.edge_groups}",
+                flush=True,
+            )
+
+        #STEP 3: group replies by edge
+        edge_replies = {edge_id: [] for edge_id in self.edge_groups.keys()}
+
         for reply in valid_replies:
-           
             metric_record = reply.content["metrics"]
-            partid = int(metric_record["partition_id"]) 
-            
-            for edge_id, group in self.edge_groups.items():
-                if partid in group:
-                    edge_replies[edge_id].append(reply)
-                    break
+            partition_id = int(metric_record["partition_id"])
 
-        #STEP 5 + 6: AGGREGATE PER EDGE AND THEN GLOBALLY
+            edge_id = self._edge_for_partition(partition_id)
+
+            if edge_id is None:
+                print(
+                    f"[SERVER] Round {server_round}: client {partition_id} has no edge group. Skipping.",
+                    flush=True,
+                )
+                continue
+
+            edge_replies[edge_id].append(reply)
+
+        #STEP 4: aggregate inside each edge group
         edge_aggregates = []
+
         for edge_id, group_messages in edge_replies.items():
             if not group_messages:
                 continue
-            
-            #FLOWER 1.29 FIX: Access namespace
-            group_examples = sum(int(msg.content["metrics"]["num-examples"]) for msg in group_messages)
-            
+
+            group_examples = sum(
+                int(msg.content["metrics"]["num-examples"])
+                for msg in group_messages
+            )
+
+            #FedAvg inside edge group
             edge_arrays, _ = super().aggregate_train(server_round, group_messages)
-            
+
             if edge_arrays is not None:
+                #Save edge model for next edge round
+                self.edge_arrays[edge_id] = edge_arrays
                 edge_aggregates.append((edge_arrays, group_examples))
+
+                print(
+                    f"[SERVER] Round {server_round}: updated EDGE model {edge_id} "
+                    f"with {len(group_messages)} clients",
+                    flush=True,
+                )
 
         if not edge_aggregates:
             return None, None
 
-        #STEP 6: GLOBAL WEIGHTED AVERAGE
+        #STEP 5: metrics
         total_examples = sum(count for _, count in edge_aggregates)
-        
-        first_arrays, _ = edge_aggregates[0]
-        avg_state = {k: torch.zeros_like(v, dtype=torch.float32) 
-                     for k, v in first_arrays.to_torch_state_dict().items()}
 
-        for arrays, count in edge_aggregates:
-            weight = count / total_examples
-            client_state = arrays.to_torch_state_dict()
-            for key in avg_state:
-                avg_state[key] += weight * client_state[key].to(torch.float32)
-
-        aggregated_metrics: dict[str, float] = {"num-examples": total_examples}
+        aggregated_metrics: dict[str, float] = {
+            "num-examples": total_examples,
+        }
 
         if train_losses:
             aggregated_metrics["train_loss"] = (
-                sum(loss * n for loss, n in train_losses) / sum(n for _, n in train_losses)
-            )
-        if train_accs:
-            aggregated_metrics["train_acc"] = (
-                sum(acc * n for acc, n in train_accs) / sum(n for _, n in train_accs)
+                sum(loss * n for loss, n in train_losses)
+                / sum(n for _, n in train_losses)
             )
 
-        return ArrayRecord(avg_state), MetricRecord(aggregated_metrics)
+        if train_accs:
+            aggregated_metrics["train_acc"] = (
+                sum(acc * n for acc, n in train_accs)
+                / sum(n for _, n in train_accs)
+            )
+
+        #STEP 6: global aggregation only every edge_rounds
+        edge_round_number = server_round - self.cluster_round + 1
+
+        if edge_round_number % self.edge_rounds == 0:
+            global_arrays = self._weighted_average_arrayrecords(edge_aggregates)
+
+            self.global_arrays = global_arrays
+
+            print(
+                f"[SERVER] Round {server_round}: GLOBAL aggregation after "
+                f"{self.edge_rounds} edge rounds",
+                flush=True,
+            )
+
+            #After global aggregation, reset all edge models to global model
+            for edge_id in self.edge_groups.keys():
+                self.edge_arrays[edge_id] = global_arrays
+
+            return global_arrays, MetricRecord(aggregated_metrics)
+
+        #No global aggregation this round
+        print(
+            f"[SERVER] Round {server_round}: EDGE ONLY round. Keeping edge models separate.",
+            flush=True,
+        )
+
+        return self.global_arrays, MetricRecord(aggregated_metrics)
     
 class Scaffold(FedAvg):
     def __init__(self, initial_parameters: ArrayRecord, lr: float, *args, **kwargs):
