@@ -49,6 +49,18 @@ class TreeStrategy(FedAvg):
         #Number of rounds we do k means clustering before mutiple agregations
         self.cluster_round = 10
 
+        #Stores latest feature vector for each client before KMeans
+        self.client_features = {}
+
+        #All clients we expect to see before doing KMeans
+        self.expected_clients = set()
+        for group in edge_groups.values():
+            for client_id in group:
+                self.expected_clients.add(int(client_id))
+
+        #Remember which round edge training actually starts
+        self.first_edge_round = None
+
 
     def _edge_for_partition(self, partition_id: int):
         #Find which edge group a partition belongs to
@@ -63,8 +75,14 @@ class TreeStrategy(FedAvg):
         #weighted_arrays =  [(ArrayRecord, num_examples), ...]
 
         total_examples = sum(count for _, count in weighted_arrays)
-        first_state = weighted_arrays[0][0].to_torch_state_dict()
 
+        #Convert each ArrayRecord only once
+        parsed_states = [
+            (arrays.to_torch_state_dict(), count)
+            for arrays, count in weighted_arrays
+        ]
+
+        first_state = parsed_states[0][0]
         avg_state = {}
 
         for key, first_value in first_state.items():
@@ -73,9 +91,8 @@ class TreeStrategy(FedAvg):
             if torch.is_floating_point(first_value):
                 avg_tensor = torch.zeros_like(first_value, dtype=torch.float32)
 
-                for arrays, count in weighted_arrays:
+                for state, count in parsed_states:
                     weight = count / total_examples
-                    state = arrays.to_torch_state_dict()
                     avg_tensor += weight * state[key].to(torch.float32)
 
                 avg_state[key] = avg_tensor.to(dtype=first_value.dtype)
@@ -200,6 +217,9 @@ class TreeStrategy(FedAvg):
             feature_vectors.append(metric_record["feature_vector"])
             valid_replies.append(reply)
 
+            #Save latest feature vector for this client
+            self.client_features[partition_id] = metric_record["feature_vector"]
+
             num_examples = (
                 int(metric_record["num-examples"])
                 if "num-examples" in metric_record
@@ -221,7 +241,10 @@ class TreeStrategy(FedAvg):
             return None, None
 
         #Before KMeans, just do normal global aggregation
-        if not self.clusters_frozen and server_round < self.cluster_round:
+        if not self.clusters_frozen and (
+            server_round < self.cluster_round
+            or not self.expected_clients.issubset(set(self.client_features.keys()))
+        ):
             print(
                 f"[SERVER] Round {server_round}: warmup round before KMeans. Doing normal global aggregation.",
                 flush=True,
@@ -259,7 +282,8 @@ class TreeStrategy(FedAvg):
 
         #STEP 2: run KMeans ONLY ONCE
         if not self.clusters_frozen and server_round >= self.cluster_round:
-            X = np.array(feature_vectors)
+            historical_client_ids = sorted(self.client_features.keys())
+            X = np.array([self.client_features[cid] for cid in historical_client_ids])
 
             num_clusters = min(self.num_edges, len(X))
 
@@ -273,11 +297,12 @@ class TreeStrategy(FedAvg):
 
             new_edge_groups = {edge_id: [] for edge_id in range(num_clusters)}
 
-            for client_id, cluster_id in zip(client_ids, cluster_labels):
+            for client_id, cluster_id in zip(historical_client_ids, cluster_labels):
                 new_edge_groups[int(cluster_id)].append(int(client_id))
 
             self.edge_groups = new_edge_groups
             self.clusters_frozen = True
+            self.first_edge_round = server_round
 
             print(
                 f"\n[SERVER] KMeans done. Frozen edge groups: {self.edge_groups}",
@@ -292,7 +317,7 @@ class TreeStrategy(FedAvg):
                 plt.figure(figsize=(6, 4))
                 plt.scatter(X_pca[:, 0], X_pca[:, 1], c=cluster_labels, cmap="viridis")
 
-                for i, cid in enumerate(client_ids):
+                for i, cid in enumerate(historical_client_ids):
                     plt.annotate(f"C{cid}", (X_pca[i, 0], X_pca[i, 1]))
 
                 plt.title(f"Round {server_round} Frozen KMeans Clusters")
@@ -372,7 +397,7 @@ class TreeStrategy(FedAvg):
             )
 
         #STEP 6: global aggregation only every edge_rounds
-        edge_round_number = server_round - self.cluster_round + 1
+        edge_round_number = server_round - self.first_edge_round + 1
 
         if edge_round_number % self.edge_rounds == 0:
             global_arrays = self._weighted_average_arrayrecords(edge_aggregates)

@@ -43,6 +43,7 @@ def train(msg: Message, context: Context):
     
     # FIX 3: Ensure the experiment directory actually exists before writing to it
     os.makedirs(f"experiment_{strategy_choice}", exist_ok=True)
+    
 
     if strategy_choice in ["fedavg", "fedprox", "fedavgcycle"]:
         train_loss, accuracy = train_fn(model, trainloader, context.run_config["local-epochs"], msg.content["config"]["lr"], device, proximal_mu=mu)
@@ -166,6 +167,8 @@ def evaluate(msg: Message, context: Context):
 
     #Load strategy_choice sent from the server side (needed for experiment folder naming)
     strategy_choice = msg.content["config"]["strategy_choice"]
+
+    os.makedirs(f"experiment_{strategy_choice}", exist_ok=True)
 
     # Call the evaluation function
     eval_loss, eval_acc = test_fn(

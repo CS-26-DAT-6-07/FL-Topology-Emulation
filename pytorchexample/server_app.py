@@ -39,12 +39,12 @@ def main(grid: Grid, context: Context) -> None:
     mu_prox: float = context.run_config["mu-prox"] #for fedprox only
     edge_rounds: int = context.run_config["edge-rounds"]
 
-    # Create experiment folder
+    #Create experiment folder
     folder_path = f"experiment_{strategy_choice}"
-    if not os.path.exists(folder_path):
-        os.mkdir(folder_path)
-        if strategy_choice == "fedtree":
-            os.mkdir(os.path.join(folder_path, "cluster_images"))
+    os.makedirs(folder_path, exist_ok=True)
+
+    if strategy_choice == "fedtree":
+        os.makedirs(os.path.join(folder_path, "cluster_images"), exist_ok=True)
 
     # Load global model
     global_model = xception()
