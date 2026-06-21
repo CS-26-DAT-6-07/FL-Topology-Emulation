@@ -26,6 +26,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from torch.nn import init
 import torch
+import os
 
 __all__ = ['xception']
 
@@ -198,13 +199,24 @@ class Xception(nn.Module):
 
 
 
-def xception(**kwargs):
+def xception(pretrained=False, **kwargs):
     """
     Construct Xception.
     """
 
     model = Xception(**kwargs)
-    
-    #if pretrained:
-    #    model.load_state_dict(model_zoo.load_url(model_urls['xception']))
+
+    pretrained_path = "xception-c0a72b38.pth"
+
+    if pretrained:
+        weights_abspath = "/home/alex/DAT-CS/FL-Topology-Emulation/pytorchexample/models/xception-c0a72b38.pth"
+        print(f"[HARDCODED]PRETRAINED_WEIGHTS_PATH={weights_abspath}")
+        state_dict = torch.load(weights_abspath, map_location='cpu')
+
+        #We pop the fc params, since they wont match (1000 classes vs. 8 classes)
+        state_dict.pop('fc.weight', None)
+        state_dict.pop('fc.bias', None)
+
+        model.load_state_dict(state_dict, strict=False)
+
     return model

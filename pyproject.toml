@@ -30,12 +30,12 @@ serverapp = "pytorchexample.server_app:app"
 clientapp = "pytorchexample.client_app:app"
 
 [tool.flwr.app.config]
-strategy-choice = "scaffold"   
+strategy-choice = "fedavgcycle"   
 num-server-rounds = 150
 fraction-train = 1
 fraction-evaluate = 1
 local-epochs = 1
 learning-rate = 0.03
-batch-size = 4
+batch-size = 32
 num-partitions = 6
 mu-prox = 0.01
