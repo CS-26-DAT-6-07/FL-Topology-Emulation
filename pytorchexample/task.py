@@ -130,12 +130,13 @@ def load_centralized_dataset(batch_size: int = 128):
     return DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-def train(net, trainloader, epochs, lr, device):
+def train(net, trainloader, epochs, lr, device, proximal_mu=0.0):
     """Train the model on the training set (standard FedAvg / FedProx)."""
     net.to(device)
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
- 
+    reference_params = [p.detach().clone() for p in net.parameters()]
+    
     net.train()
     running_loss = 0.0
     correct = 0
@@ -148,6 +149,18 @@ def train(net, trainloader, epochs, lr, device):
             optimizer.zero_grad()
             outputs = net(images.float())
             loss = criterion(outputs, labels)
+
+            #FedProx part for FedTree
+            if proximal_mu > 0.0:
+
+                print(f"[FedProx ACTIVE] mu={proximal_mu}", flush=True)
+                
+                proximal_term = torch.tensor(0.0, device=device)
+                for local_param, reference_param in zip(net.parameters(), reference_params):
+                    proximal_term += torch.sum((local_param - reference_param) ** 2)
+
+                loss = loss + (proximal_mu / 2.0) * proximal_term
+
             loss.backward()
             optimizer.step()
  
@@ -190,9 +203,11 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
                         continue
                     if name not in local_cv or name not in global_cv:
                         continue
+                    
                     param.grad.data.add_(                                       #add correction term to original gradient
                         global_cv[name].to(device) - local_cv[name].to(device)  #subtract client bias
                     )
+
 
             optimizer.step()
  
@@ -214,20 +229,17 @@ def scaffold_train(net, trainloader, epochs, lr, device, global_cv, local_cv):
     #compute new local control variate
     new_local_cv: dict[str, torch.Tensor] = {}
     cv_diff: dict[str, torch.Tensor] = {}
-
-    
     with torch.no_grad():
-        for key in init_global_params:
-            # 1. Calculate drift on the active training device (GPU/CPU)
-            client_drift = init_global_params[key] - updated_model[key]                         
-            
-            # 2. Explicitly move control variates to the same device for the math
-            new_client_cv = local_cv[key].to(device) - global_cv[key].to(device) + scaling_factor * client_drift      
-            
-            # 3. Bring them back to the CPU so Flower can package them safely
-            new_local_cv[key] = new_client_cv.cpu()                                                   
-            cv_diff[key] = (new_client_cv - local_cv[key].to(device)).cpu()                                        
-
+            for key in init_global_params:
+                # 1. Calculate drift on the active training device (GPU/CPU)
+                client_drift = init_global_params[key] - updated_model[key]                         
+                
+                # 2. Explicitly move control variates to the same device for the math
+                new_client_cv = local_cv[key].to(device) - global_cv[key].to(device) + scaling_factor * client_drift      
+                
+                # 3. Bring them back to the CPU so Flower can package them safely
+                new_local_cv[key] = new_client_cv.cpu()                                                   
+                cv_diff[key] = (new_client_cv - local_cv[key].to(device)).cpu()  
     return avg_train_loss, accuracy, net, new_local_cv, cv_diff
 
 def test(net, testloader, device, global_eval=False):

@@ -63,6 +63,10 @@ def main(grid: Grid, context: Context) -> None:
         strategy = TreeStrategy(
             edge_groups=EDGE_GROUPS,
             fraction_evaluate=fraction_evaluate,
+            proximal_mu=mu_prox,
+            fraction_train=fraction_train,
+            min_available_nodes=6,
+
         )
     elif strategy_choice == "scaffold":
         strategy = Scaffold(

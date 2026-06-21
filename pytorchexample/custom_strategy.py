@@ -11,7 +11,7 @@ from logging import INFO
 
 from flwr.app import ArrayRecord, ConfigRecord, Context, Message, RecordDict, MessageType, MetricRecord
 from flwr.serverapp import Grid
-from flwr.serverapp.strategy import FedAvg
+from flwr.serverapp.strategy import FedAvg, FedProx
 from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters, FitIns, log
 from flwr.server.strategy.aggregate import aggregate
 from flwr.serverapp.strategy.strategy_utils import sample_nodes
@@ -19,9 +19,10 @@ from flwr.serverapp.strategy.strategy_utils import sample_nodes
 
 
 class TreeStrategy(FedAvg):
-    def __init__(self, edge_groups, *args, **kwargs):
+    def __init__(self, edge_groups, proximal_mu=0.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.edge_groups = edge_groups
+        self.proximal_mu = proximal_mu
 
     #A bunch of stuff had to change to fit flower 1.29
     def configure_train(
@@ -33,7 +34,11 @@ class TreeStrategy(FedAvg):
     ) -> Iterable[Message]:
         """Configure the next round of federated training."""
         #print(f"------------- Round {server_round}: Configuring training -------------", flush=True)
-    
+
+        config["proximal-mu"] = self.proximal_mu
+
+        print(f"[SERVER] Round {server_round}: sending proximal_mu={self.proximal_mu}",flush=True,)
+
         return super().configure_train(
             server_round=server_round,
             arrays=arrays,
@@ -202,11 +207,12 @@ class Scaffold(FedAvg):
         )
         config["server-round"] = server_round
 
+        self.global_state = arrays.to_torch_state_dict()
         #Save initial server param & set control variate to zero on first round
         if self.global_cv is None:
             state = arrays.to_torch_state_dict()
             self.global_cv = {key: torch.zeros_like(value) for key, value in state.items()}
-
+        
         #add global cv to array record to send to clients 
         combined: dict[str, torch.Tensor] = dict(arrays.to_torch_state_dict())
         for key, value in self.global_cv.items():
@@ -264,24 +270,33 @@ class Scaffold(FedAvg):
         #aggregate client control variates into global control variate update
         if cv_difference and self.global_cv is not None:
             total_clients = len(cv_difference)
+            sampled_clients = len(valid_replies)
             with torch.no_grad():
                 for key in self.global_cv.keys():                                                          #loop through each layer of the model
-                    total_cv_diff = torch.stack([cv_diff[key] for cv_diff in cv_difference]).sum(dim=0)    #sum up the control variate differences for this layer across clients
-                    self.global_cv[key] = self.global_cv[key] + total_cv_diff / total_clients              #update global control variate by adding average client control variate difference
+                    total_cv_diff = (1/sampled_clients)*torch.stack([cv_diff[key] for cv_diff in cv_difference]).sum(dim=0)    #sum up the control variate differences for this layer across clients
+                    self.global_cv[key] = self.global_cv[key] + (sampled_clients / total_clients)*total_cv_diff            #update global control variate by adding average client control variate difference
 
         #aggregate client model updates (cant do fedavg anymore bc control variate is in the same array record)
         total_examples = sum(num_examples_list)
         if total_examples == 0:
             return None, None
         
-        avg_state = {key: torch.zeros_like(value, dtype=torch.float32)
+        #avg_state = {key: torch.zeros_like(value, dtype=torch.float32)
+        #             for key, value in model_states[0].items()}
+        new_global = {key: torch.zeros_like(value, dtype=torch.float32)
                      for key, value in model_states[0].items()}
+        #Calculate the new model
+        with torch.no_grad():
+            for key in self.global_state.keys():
+                model_diff = (1/sampled_clients)*(torch.stack([model[key] - self.global_state[key] for model in model_states]).sum(dim=0))
+                new_global[key] = self.global_state[key] + self.lr*model_diff
         
+        '''
         for state, num_examples in zip(model_states, num_examples_list):
             weight = num_examples / total_examples
             for key in avg_state:
                 avg_state[key] += weight * state[key].to(torch.float32)
-
+        '''
         #Weighted average aggregation for train_loss and train_acc
         aggregated_metrics: dict[str, float] = {"num-examples": total_examples}
 
@@ -294,7 +309,7 @@ class Scaffold(FedAvg):
                 sum(acc * n for acc, n in train_accs) / sum(n for _, n in train_accs)
             )
 
-        return ArrayRecord(avg_state), MetricRecord(aggregated_metrics)
+        return ArrayRecord(new_global), MetricRecord(aggregated_metrics)
 
 
 class FedAvgCyclic(FedAvg):
